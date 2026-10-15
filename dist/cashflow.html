@@ -675,8 +675,100 @@ function renderPpt(){
   $('#pptM').onchange=e=>{S.pptM=e.target.value;save();renderPpt()}}
 
 /* ---------- DATOS ---------- */
-// API credentials and tokens deliberately stay outside S/localStorage.
-const FAPI={clientId:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null};
+// Credentials use a separate encrypted browser vault; tokens remain in memory.
+const CredentialVault=(()=>{
+  let opening,queue=Promise.resolve();
+  function open(){
+    if(!globalThis.indexedDB||!globalThis.crypto?.subtle)return Promise.reject(new Error('Storage unavailable'));
+    if(!opening)opening=new Promise((resolve,reject)=>{
+      const req=indexedDB.open('fisterra-cashflow-credentials',1);
+      req.onupgradeneeded=()=>req.result.createObjectStore('vault');
+      req.onsuccess=()=>{const db=req.result;db.onversionchange=()=>{db.close();opening=null};resolve(db)};
+      req.onerror=()=>{opening=null;reject(req.error)};
+      req.onblocked=()=>{opening=null;reject(new Error('Storage blocked'))};
+    });
+    return opening;
+  }
+  async function pair(){
+    const db=await open();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('vault','readonly'),store=tx.objectStore('vault');
+      const key=store.get('key'),record=store.get('credentials');
+      tx.oncomplete=()=>resolve({key:key.result,record:record.result});
+      tx.onerror=tx.onabort=()=>reject(tx.error||new Error('Storage read failed'));
+    });
+  }
+  async function write(key,record){
+    const db=await open();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('vault','readwrite'),store=tx.objectStore('vault');
+      store.put(key,'key');store.put(record,'credentials');
+      tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||new Error('Storage write failed'));
+    });
+  }
+  const serial=action=>{const next=queue.catch(()=>{}).then(action);queue=next;return next};
+  return {
+    load:()=>serial(async()=>{
+      const {key,record}=await pair();if(!key&&!record)return null;
+      if(!key||!record)throw new Error('Incomplete credentials');
+      const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:record.iv},key,record.cipher);
+      const value=JSON.parse(new TextDecoder().decode(plain));
+      if(typeof value.clientId!=='string'||typeof value.clientSecret!=='string')throw new Error('Invalid credentials');
+      return value;
+    }),
+    save:value=>serial(async()=>{
+      let {key}=await pair();
+      if(!key)key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(value)));
+      await write(key,{iv,cipher,version:1});
+    }),
+    clear:()=>serial(async()=>{
+      const db=await open();
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction('vault','readwrite');tx.objectStore('vault').clear();
+        tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||new Error('Storage clear failed'));
+      });
+    })
+  };
+})();
+const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
+function credentialMessage(message,error=false){FAPI.credsMessage=message;FAPI.credsError=error;const node=$('#apiCredentialMessage');if(node){node.textContent=message;node.className='msg api-message'+(error?' err':'')}}
+async function persistCredentials(){
+  clearTimeout(FAPI.saveTimer);
+  const value={clientId:FAPI.clientId.trim(),clientSecret:FAPI.clientSecret},version=FAPI.credsVersion;
+  if(!value.clientId||!value.clientSecret.trim()){credentialMessage('Completá ambas credenciales para guardarlas.');return false}
+  credentialMessage('Guardando credenciales…');
+  try{
+    await CredentialVault.save(value);
+    if(version===FAPI.credsVersion){FAPI.saved=true;credentialMessage('Credenciales guardadas en este navegador.')}
+    return true;
+  }catch{if(version===FAPI.credsVersion)credentialMessage('No se pudieron guardar las credenciales. Verificá que el navegador permita almacenar datos de este sitio.',true);return false}
+}
+function credentialsChanged(){
+  FAPI.clientId=$('#apiClientId').value;FAPI.clientSecret=$('#apiClientSecret').value;FAPI.credsVersion++;FAPI.saved=false;
+  clearTimeout(FAPI.saveTimer);credentialMessage('Cambios pendientes de guardar.');
+  if(FAPI.clientId.trim()&&FAPI.clientSecret.trim())FAPI.saveTimer=setTimeout(persistCredentials,250);
+}
+async function forgetCredentials(){
+  clearTimeout(FAPI.saveTimer);FAPI.credsVersion++;
+  try{
+    await CredentialVault.clear();clearTimeout(FAPI.timer);
+    FAPI.clientId='';FAPI.clientSecret='';FAPI.token='';FAPI.expiresAt=0;FAPI.saved=false;FAPI.message='';FAPI.error=false;
+    credentialMessage('Credenciales eliminadas de este navegador.');if(S.tab==='dat')renderDat();
+  }catch{credentialMessage('No se pudieron eliminar las credenciales guardadas. Intentá nuevamente.',true)}
+}
+async function restoreCredentials(){
+  const version=FAPI.credsVersion;
+  try{
+    const value=await CredentialVault.load();
+    if(value&&version===FAPI.credsVersion){
+      FAPI.clientId=value.clientId;FAPI.clientSecret=value.clientSecret;FAPI.saved=true;
+      credentialMessage('Credenciales recuperadas de este navegador.');
+      if(S.tab==='dat'){$('#apiClientId').value=FAPI.clientId;$('#apiClientSecret').value=FAPI.clientSecret}
+    }
+  }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
+}
 const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']]};
 const REPORT_STATE={CLI:{filters:{},busy:false,message:'',error:false},PRV:{filters:{},busy:false,message:'',error:false}};
 function reportOptions(k){
@@ -712,9 +804,10 @@ function apiSection(){
     <form id="finnegansForm" autocomplete="off">
       <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><input id="apiClientId" name="client_id" type="text" value="${esc(FAPI.clientId)}" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}></div>
       <div class="fld"><label for="apiClientSecret">Client_Secret</label><div class="api-secret"><input id="apiClientSecret" name="client_secret" type="password" placeholder="Ingresá tu Client_Secret" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowSecret" aria-controls="apiClientSecret" aria-pressed="false">Mostrar</button></div></div></div>
-      <p class="note">En Finnegans, Client_Secret también se identifica como SECRET_KEY. El secreto no se guarda y el token se elimina al recargar o cerrar esta página.</p>
-      <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Obteniendo token…':active?'Renovar token':'Obtener token'}</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
+      <p class="note">Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan automáticamente, cifrados en este navegador. El token se elimina al recargar o cerrar la página.</p>
+      <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Obteniendo token…':active?'Renovar token':'Obtener token'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
+    <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>
     <div id="apiMessage" class="msg api-message${FAPI.error?' err':active?' ok':''}" role="status" aria-live="polite">${esc(FAPI.message)}</div>
     ${active?`<p class="note">Vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}. Usá Obtener por API en Clientes o Proveedores para consultar sus saldos.</p>`:''}
     <p class="note">La obtención del token está disponible en la versión web. Las cargas de Excel siguen disponibles debajo.</p>
@@ -724,18 +817,19 @@ async function requestFinnegansToken(e){
   if(location.protocol==='file:'){FAPI.message='Abrí la versión web de Cashflow para obtener el token de Finnegans.';FAPI.error=true;renderDat();return}
   const clientId=$('#apiClientId').value.trim(),secret=$('#apiClientSecret').value;
   if(!clientId||!secret.trim())return;
-  FAPI.clientId=clientId;FAPI.busy=true;FAPI.error=false;FAPI.message='Solicitando el token a Finnegans…';
+  FAPI.clientId=clientId;FAPI.clientSecret=secret;FAPI.busy=true;FAPI.error=false;FAPI.message='Solicitando el token a Finnegans…';
   clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;
   const payload=JSON.stringify({client_id:clientId,client_secret:secret});
   renderDat();
   try{
+    await persistCredentials();
     const response=await fetch('/api/finnegans-token',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,cache:'no-store',signal:AbortSignal.timeout(25000)});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new Error(data&&data.error||'No se pudo obtener el token. Intentá nuevamente.');
     if(!data||typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=0)throw new Error('Finnegans devolvió una respuesta de autenticación no válida.');
     FAPI.token=data.access_token;FAPI.expiresAt=Date.now()+Math.min(data.expires_in,3600)*1000;
     FAPI.message='Token obtenido correctamente. Ya podés continuar con la configuración de las fuentes API.';
-    FAPI.timer=setTimeout(()=>{FAPI.token='';FAPI.expiresAt=0;FAPI.message='El token venció. Ingresá el secreto nuevamente para renovarlo.';if(S.tab==='dat')renderDat()},Math.max(0,FAPI.expiresAt-Date.now()));
+    FAPI.timer=setTimeout(()=>{FAPI.token='';FAPI.expiresAt=0;FAPI.message='El token venció. Seleccioná Obtener token para continuar con las credenciales guardadas.';if(S.tab==='dat')renderDat()},Math.max(0,FAPI.expiresAt-Date.now()));
   }catch(err){FAPI.error=true;FAPI.message=err.name==='TimeoutError'||err.name==='AbortError'?'La solicitud demoró demasiado. Intentá nuevamente.':err instanceof TypeError?'No se pudo conectar. Revisá tu conexión e intentá nuevamente.':err.message}
   finally{FAPI.busy=false;if(S.tab==='dat')renderDat()}
 }
@@ -762,7 +856,11 @@ function renderDat(){
   <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   $('#finnegansForm').onsubmit=requestFinnegansToken;
-  $('#apiClientId').oninput=e=>{FAPI.clientId=e.target.value};
+  $('#apiClientSecret').value=FAPI.clientSecret;
+  $('#apiClientId').oninput=$('#apiClientSecret').oninput=credentialsChanged;
+  $('#apiClientId').onchange=$('#apiClientSecret').onchange=()=>{credentialsChanged();if(FAPI.clientId.trim()&&FAPI.clientSecret.trim())persistCredentials()};
+  $('#apiSaveCredentials').onclick=()=>{credentialsChanged();persistCredentials()};
+  $('#apiForgetCredentials').onclick=forgetCredentials;
   $('#apiShowSecret').onclick=()=>{const input=$('#apiClientSecret'),show=input.type==='password';input.type=show?'text':'password';$('#apiShowSecret').textContent=show?'Ocultar':'Mostrar';$('#apiShowSecret').setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
@@ -851,6 +949,7 @@ document.querySelectorAll('#pGran button').forEach(b=>b.onclick=()=>{S.gran=b.da
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='res')renderRes()},150)});
 setTab(S.tab);renderAll();
+restoreCredentials();
 </script>
 </body>
 </html>

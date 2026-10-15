@@ -54,9 +54,13 @@ Los cambios enviados a `main` disparan el despliegue si está activa la integrac
 
 En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_KEY` en Finnegans) y seleccionar **Obtener token**.
 
-La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el navegador ni los logs de la aplicación.
+La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el servidor ni los logs de la aplicación.
 
-El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Renovar token** requiere ingresar nuevamente el secreto.
+Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. Al volver a abrir el sitio se recuperan ambos campos; el secreto sigue oculto. Esta persistencia corresponde al navegador y al dominio utilizados: no se sincroniza entre dispositivos. El cifrado local no sustituye la seguridad del navegador y del equipo ni protege de código malicioso ejecutado dentro del mismo origen.
+
+**Olvidar credenciales** elimina las credenciales y su clave local, vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token, conservando las credenciales. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
+
+El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Obtener token** y **Renovar token** utilizan los campos recuperados, sin necesidad de volver a escribir las credenciales.
 
 La autenticación requiere la versión desplegada en Vercel; abrir el HTML local mantiene las funciones de Excel, pero no ejecuta la función de servidor.
 
