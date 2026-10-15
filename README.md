@@ -44,10 +44,21 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 
 - Carpeta raíz del proyecto: la raíz del repositorio.
 - Carpeta publicada: `dist`.
-- Sin instalación de dependencias ni compilación en Vercel: el HTML generado ya está versionado.
+- Sin instalación de dependencias ni compilación del frontend: el HTML generado ya está versionado.
 - La ruta `/` sirve `dist/cashflow.html`.
+- Vercel también publica la función Node.js `api/finnegans-token.js` para autenticar con Finnegans.
 
 Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. Después de editar la plantilla, regenerar `dist/cashflow.html` con `scripts/build.py` antes de subirla.
+
+## Conexión API con Finnegans
+
+En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_KEY` en Finnegans) y seleccionar **Obtener token**.
+
+La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el navegador ni los logs de la aplicación.
+
+El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Renovar token** requiere ingresar nuevamente el secreto. Esta etapa habilita autenticación; todavía no importa datasets desde APIs ni reemplaza las cargas de Excel.
+
+La autenticación requiere la versión desplegada en Vercel; abrir el HTML local mantiene las funciones de Excel, pero no ejecuta la función de servidor.
 
 ## Notas
 

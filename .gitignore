@@ -8,3 +8,6 @@ tmp/
 dist/*private*
 __pycache__/
 *.pyc
+.env
+.env.*
+.vercel/
