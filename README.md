@@ -38,6 +38,17 @@ python scripts/build.py data/private/data.json dist/cashflow-private.html
 
 `data/private/` y los archivos `*private*` de `dist/` están en `.gitignore`, para que los datos de clientes no se suban al repositorio.
 
+## Publicación en Vercel
+
+El repositorio incluye `vercel.json` para servir la app como sitio estático:
+
+- Carpeta raíz del proyecto: la raíz del repositorio.
+- Carpeta publicada: `dist`.
+- Sin instalación de dependencias ni compilación en Vercel: el HTML generado ya está versionado.
+- La ruta `/` sirve `dist/cashflow.html`.
+
+Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. Después de editar la plantilla, regenerar `dist/cashflow.html` con `scripts/build.py` antes de subirla.
+
 ## Notas
 
 - La identidad visual usa el sistema de diseño de Fisterra: Montserrat, fondo gris, navy y titulares rojos. Los recursos se conservan en `app/brand/`.
