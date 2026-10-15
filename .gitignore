@@ -1,0 +1,10 @@
+# Datos reales de clientes: no se versionan
+data/private/
+data/raw/
+exeles/
+tmp/
+*.xlsx
+*.xls
+dist/*private*
+__pycache__/
+*.pyc
