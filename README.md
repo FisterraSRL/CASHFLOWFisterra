@@ -56,11 +56,27 @@ En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_
 
 La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el navegador ni los logs de la aplicación.
 
-El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Renovar token** requiere ingresar nuevamente el secreto. Esta etapa habilita autenticación; todavía no importa datasets desde APIs ni reemplaza las cargas de Excel.
+El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Renovar token** requiere ingresar nuevamente el secreto.
 
 La autenticación requiere la versión desplegada en Vercel; abrir el HTML local mantiene las funciones de Excel, pero no ejecuta la función de servidor.
 
-Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar**. El botón API guía a obtener un token si falta; con un token vigente informa que todavía debe configurarse el endpoint de esa fuente. No ejecuta consultas ni reemplaza registros hasta implementar esa integración. **Quitar** se deshabilita cuando la fuente no tiene datos.
+Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar**. El botón API guía a obtener un token si falta. **Quitar** se deshabilita cuando la fuente no tiene datos.
+
+### Composición de saldos por API
+
+Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Las otras fuentes todavía requieren configurar su integración.
+
+1. Obtener el token.
+2. En la tarjeta, abrir **Parámetros de composición de saldos** si se necesita cambiar la fecha o agregar filtros. La fecha inicial es la fecha de corte; los demás filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
+3. Seleccionar **Obtener por API**. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
+
+Parámetros comunes: fecha, organización, circuito contable, cuenta, moneda y empresa. Proveedores agrega dimensión, valor de dimensión y tipo de documento. Los nombres y mayúsculas de los parámetros se conservan según los endpoints indicados.
+
+La llamada del navegador al servidor usa POST; el servidor realiza el GET requerido por Finnegans. El token no aparece en la URL del navegador ni se guarda con los filtros o datos. Los resultados permanecen en el navegador como las cargas de Excel.
+
+El adaptador admite filas JSON directas o dentro de contenedores `data`, `rows`, `items`, `result`, `records`, entre otros. Reconoce los campos de composición `IMPORTEMONPPAL`, `IMPORTEMONTRAN`, `FECHAVTO` y sus equivalentes del Excel. Mantiene signos, importe original USD y vencimiento actual. Si falta el vencimiento, solo lo reconstruye con mora positiva respecto de la fecha del reporte o con una condición simple en días, informándolo al usuario.
+
+Se rechazan respuestas con campos obligatorios faltantes, fechas/importes inválidos, monedas no soportadas, paginación pendiente o tamaño excesivo. Una respuesta vacía o fallida conserva la carga anterior. El mapeo debe validarse con la respuesta real de la instalación; no se han usado credenciales reales en las pruebas.
 
 ## Notas
 

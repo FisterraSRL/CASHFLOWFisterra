@@ -194,6 +194,11 @@ label.btn input{display:none}
 .api-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px}
 .api-card .note{margin:8px 0 0}
 .api-message{margin-top:12px;overflow-wrap:anywhere}
+.report-options{margin:8px 0;border-top:1px solid var(--line);padding-top:10px}
+.report-options summary{cursor:pointer;color:var(--brand);font-weight:600;font-size:12px}
+.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+.report-grid input{width:100%;font-size:12px}
+.report-options .note{margin:8px 0 0}
 button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:640px){.api-fields{grid-template-columns:minmax(0,1fr)}}
 .msg{font-size:12px} .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
@@ -601,6 +606,35 @@ function renderPpt(){
 /* ---------- DATOS ---------- */
 // API credentials and tokens deliberately stay outside S/localStorage.
 const FAPI={clientId:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null};
+const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']]};
+const REPORT_STATE={CLI:{filters:{},busy:false,message:'',error:false},PRV:{filters:{},busy:false,message:'',error:false}};
+function reportOptions(k){
+  if(!REPORT_FIELDS[k])return '';
+  const r=REPORT_STATE[k],fields=[['fecha','Fecha del reporte'],...REPORT_FIELDS[k]];
+  return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label><input id="report-${k}-${key}" data-report="${k}" data-filter="${key}" type="${key==='fecha'?'date':'text'}" value="${esc(r.filters[key]??(key==='fecha'?S.ref:''))}"${key==='fecha'?' required':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}${r.busy?' disabled':''}></div>`).join('')}</div><p class="note">Se usa la fecha de corte salvo que la cambies aquí. Los filtros vacíos se omiten; completá los códigos que requiera tu reporte de Finnegans.</p></details>`;
+}
+async function obtainReport(k){
+  const state=REPORT_STATE[k];if(!state||state.busy)return;
+  const filters={fecha:S.ref,...state.filters};
+  const dt=D(filters.fecha);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
+  if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
+  state.busy=true;state.error=false;state.message='Consultando composición de saldos en Finnegans…';renderDat();
+  try{
+    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:FAPI.token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
+    const data=await response.json().catch(()=>null);
+    if(!response.ok){
+      if(response.status===401){clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Finnegans rechazó el token o los permisos. Obtené un token nuevo para reintentar.';FAPI.error=true}
+      throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
+    }
+    if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
+    if(!data.rows.length){state.message='La consulta no devolvió saldos pendientes. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return}
+    const warnings=Array.isArray(data.warnings)?data.warnings:[];
+    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings};save();
+    state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
+  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message}
+  finally{state.busy=false;if(S.tab==='dat')renderDat()}
+}
 function apiSection(){
   const active=!!FAPI.token&&FAPI.expiresAt>Date.now();
   return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':'Sin conexión'}</span></div>
@@ -611,7 +645,7 @@ function apiSection(){
       <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Obteniendo token…':active?'Renovar token':'Obtener token'}</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
     <div id="apiMessage" class="msg api-message${FAPI.error?' err':active?' ok':''}" role="status" aria-live="polite">${esc(FAPI.message)}</div>
-    ${active?`<p class="note">Vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}. La consulta de clientes, proveedores y cheques por API se configurará en la próxima etapa.</p>`:''}
+    ${active?`<p class="note">Vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}. Usá Obtener por API en Clientes o Proveedores para consultar sus saldos.</p>`:''}
     <p class="note">La obtención del token está disponible en la versión web. Las cargas de Excel siguen disponibles debajo.</p>
   </div>`}
 async function requestFinnegansToken(e){
@@ -640,25 +674,28 @@ function renderDat(){
     const tot=['PPTO','EJE'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
+    ${d.filters?`<div class="note">Filtros de la carga: ${esc(Object.entries(d.filters).filter(([key,value])=>key!=='fecha'&&value).map(([key,value])=>((REPORT_FIELDS[k]||[]).find(([f])=>f===key)||[key,key])[1]+': '+value).join(' · ')||'sin filtros adicionales')}</div>`:''}
     ${s.tpl?`<div><span class="note">Columnas de la plantilla:</span><br>${s.tpl.map(c=>`<code>${c}</code>`).join('')}</div>`:`<div class="note">Usá el mismo listado exportado de Finnegans. Columnas clave: ${s.req.map(c=>`<code>${c}</code>`).join('')}</div>`}
-    <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"></label>
-    <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API">Obtener por API</button>
-    <button type="button" class="btn" data-clr="${k}"${n?'':' disabled title="No hay datos para quitar"'}>Quitar</button></div>
+    ${reportOptions(k)}
+    <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"${REPORT_STATE[k]?.busy?' disabled':''}></label>
+    <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API"${REPORT_STATE[k]?.busy?' disabled':''}>${REPORT_STATE[k]?.busy?'Consultando…':'Obtener por API'}</button>
+    <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
-    <div class="msg" id="msg-${k}" role="status" aria-live="polite"></div></div>`}).join('')}</div>
-  <div class="card" style="margin-top:16px"><h2>Conexión con el datawarehouse de Finnegans</h2><p class="sub">Estado: pendiente · hoy la app se alimenta con los Excel exportados</p>
-  <div class="prose"><p>Cada fuente de esta pantalla se reemplaza por una consulta al datawarehouse, con la misma estructura de columnas que ya usa la app:</p>
+    <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div></div>`}).join('')}</div>
+  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes y proveedores: API disponible · otras fuentes: Excel o integración pendiente</p>
+  <div class="prose"><p>Las APIs de composición de saldos ya pueden consultarse desde Clientes y Proveedores. El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>
   <li><b>Ejecutado y saldos bancarios</b>: movimientos de tesorería y saldo de cada cuenta al cierre del día anterior.</li></ul>
-  <p>Para conectarlo hace falta el acceso al DW (usuario de servicio y método de conexión que habilite Finnegans) y una actualización programada diaria.</p></div>
+  <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   $('#finnegansForm').onsubmit=requestFinnegansToken;
   $('#apiClientId').oninput=e=>{FAPI.clientId=e.target.value};
   $('#apiShowSecret').onclick=()=>{const input=$('#apiClientSecret'),show=input.type==='password';input.type=show?'text':'password';$('#apiShowSecret').textContent=show?'Ocultar':'Mostrar';$('#apiShowSecret').setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
+  v.querySelectorAll('[data-report]').forEach(input=>input.oninput=()=>{REPORT_STATE[input.dataset.report].filters[input.dataset.filter]=input.value});
   v.querySelectorAll('[data-api]').forEach(b=>b.onclick=()=>{
     const k=b.dataset.api,msg=$('#msg-'+k);msg.className='msg';
     if(!FAPI.token||FAPI.expiresAt<=Date.now()){
@@ -669,6 +706,7 @@ function renderDat(){
       $('#apiMessage').textContent=FAPI.message;$('#apiMessage').className='msg api-message';
       return;
     }
+    if(REPORT_FIELDS[k]){obtainReport(k);return}
     msg.textContent='El token está vigente. Falta configurar la API de '+SRC[k].n+' para importar los datos.';
   });
   v.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{loadExample(b.dataset.ex);renderAll()});

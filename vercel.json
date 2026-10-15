@@ -4,6 +4,9 @@
   "buildCommand": "",
   "installCommand": "",
   "outputDirectory": "dist",
+  "functions": {
+    "api/finnegans-report.js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/", "destination": "/cashflow.html" }
   ]
