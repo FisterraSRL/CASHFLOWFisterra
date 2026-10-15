@@ -60,6 +60,8 @@ El token se conserva únicamente en memoria de la página durante hasta una hora
 
 La autenticación requiere la versión desplegada en Vercel; abrir el HTML local mantiene las funciones de Excel, pero no ejecuta la función de servidor.
 
+Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar**. El botón API guía a obtener un token si falta; con un token vigente informa que todavía debe configurarse el endpoint de esa fuente. No ejecuta consultas ni reemplaza registros hasta implementar esa integración. **Quitar** se deshabilita cuando la fuente no tiene datos.
+
 ## Notas
 
 - La identidad visual usa el sistema de diseño de Fisterra: Montserrat, fondo gris, navy y titulares rojos. Los recursos se conservan en `app/brand/`.

@@ -179,6 +179,8 @@ label.btn input{display:none}
 .src .st{font-size:12px;color:var(--ink2)}
 .src code{font-family:var(--f-mono);font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;display:inline-block;margin:2px 2px 0 0}
 .src .act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+.src .actaux{display:flex;gap:6px;flex-wrap:wrap}
+.src .act .btn{padding-inline:12px}
 .api-card{margin-bottom:20px}
 .api-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .api-status{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
@@ -192,7 +194,7 @@ label.btn input{display:none}
 .api-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px}
 .api-card .note{margin:8px 0 0}
 .api-message{margin-top:12px;overflow-wrap:anywhere}
-button:disabled{cursor:wait;opacity:.6}
+button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:640px){.api-fields{grid-template-columns:minmax(0,1fr)}}
 .msg{font-size:12px} .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
 .empty{padding:28px;text-align:center;color:var(--ink2)}
@@ -640,8 +642,10 @@ function renderDat(){
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
     ${s.tpl?`<div><span class="note">Columnas de la plantilla:</span><br>${s.tpl.map(c=>`<code>${c}</code>`).join('')}</div>`:`<div class="note">Usá el mismo listado exportado de Finnegans. Columnas clave: ${s.req.map(c=>`<code>${c}</code>`).join('')}</div>`}
     <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"></label>
-    ${s.tpl?`<button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button>`:''}
-    ${n?`<button class="btn" data-clr="${k}">Quitar</button>`:''}</div><div class="msg" id="msg-${k}"></div></div>`}).join('')}</div>
+    <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API">Obtener por API</button>
+    <button type="button" class="btn" data-clr="${k}"${n?'':' disabled title="No hay datos para quitar"'}>Quitar</button></div>
+    ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
+    <div class="msg" id="msg-${k}" role="status" aria-live="polite"></div></div>`}).join('')}</div>
   <div class="card" style="margin-top:16px"><h2>Conexión con el datawarehouse de Finnegans</h2><p class="sub">Estado: pendiente · hoy la app se alimenta con los Excel exportados</p>
   <div class="prose"><p>Cada fuente de esta pantalla se reemplaza por una consulta al datawarehouse, con la misma estructura de columnas que ya usa la app:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
@@ -655,6 +659,18 @@ function renderDat(){
   $('#apiShowSecret').onclick=()=>{const input=$('#apiClientSecret'),show=input.type==='password';input.type=show?'text':'password';$('#apiShowSecret').textContent=show?'Ocultar':'Mostrar';$('#apiShowSecret').setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
+  v.querySelectorAll('[data-api]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.api,msg=$('#msg-'+k);msg.className='msg';
+    if(!FAPI.token||FAPI.expiresAt<=Date.now()){
+      msg.textContent='Primero obtené un token vigente en Conexión API con Finnegans.';
+      $('#finnegansForm').scrollIntoView({block:'center'});
+      (FAPI.clientId?$('#apiClientSecret'):$('#apiClientId')).focus({preventScroll:true});
+      FAPI.message='Para obtener '+SRC[k].n+' por API, primero ingresá las credenciales y obtené el token.';
+      $('#apiMessage').textContent=FAPI.message;$('#apiMessage').className='msg api-message';
+      return;
+    }
+    msg.textContent='El token está vigente. Falta configurar la API de '+SRC[k].n+' para importar los datos.';
+  });
   v.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{loadExample(b.dataset.ex);renderAll()});
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});
   v.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=SRC[b.dataset.copy].tpl.join('\t');const m=$('#msg-'+b.dataset.copy);
