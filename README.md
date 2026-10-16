@@ -86,6 +86,8 @@ El adaptador admite filas JSON directas o dentro de contenedores `data`, `rows`,
 
 Se rechazan respuestas con campos obligatorios faltantes, fechas/importes inválidos, monedas no soportadas, paginación pendiente o tamaño excesivo. Una respuesta vacía o fallida conserva la carga anterior. El mapeo debe validarse con la respuesta real de la instalación; no se han usado credenciales reales en las pruebas.
 
+Después de cada consulta, **Ver llamada y respuesta de Finnegans** muestra el GET del reporte, sus parámetros, el estado HTTP del proveedor y una vista de la respuesta original. También está disponible si falla la conversión a movimientos. El token se oculta, los campos de secretos se redactan y el cuerpo se limita a 32.768 caracteres. El detalle se mantiene solo en memoria, no en localStorage ni en logs; **Copiar detalle** copia la misma versión redactada.
+
 ## Notas
 
 - La identidad visual usa el sistema de diseño de Fisterra: Montserrat, fondo gris, navy y titulares rojos. Los recursos se conservan en `app/brand/`.

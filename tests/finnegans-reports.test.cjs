@@ -70,7 +70,7 @@ test('proxy rejects unsafe or incomplete requests before contacting provider',as
  assert.equal((await invoke(req({body:{source:'CLI',filters:{fecha:'2026-10-15'}}}))).statusCode,400);
  assert.equal((await invoke(req({body:{source:'CHP',access_token:'token',filters:{fecha:'2026-10-15'}}}))).statusCode,400);
 });
-test('provider failures and unknown schemas do not expose raw data or tokens',async()=>{
+test('provider failures are mapped and tokens remain redacted in diagnostics',async()=>{
  for(const [up,status]of [[401,401],[403,401],[400,400],[404,502],[500,502],[429,429]]){
   const r=await invoke(req(),async()=>new Response('test.token secret provider details',{status:up}));assert.equal(r.statusCode,status);assert.ok(!JSON.stringify(r.body).includes('test.token'));
  }
@@ -78,4 +78,20 @@ test('provider failures and unknown schemas do not expose raw data or tokens',as
  const unknown=await invoke(req(),async()=>new Response(JSON.stringify([{unexpected:123}])));
  assert.equal(unknown.statusCode,422);
  assert.equal((await invoke(req(),async()=>{const e=new Error();e.name='TimeoutError';throw e})).statusCode,504);
+});
+test('invalid due dates include the actual response and masked request for diagnosis',async()=>{
+ const payload=[fixture({FECHAVTO:'31-10-2026',ACCESS_TOKEN:'test.token'})];
+ const r=await invoke(req(),async()=>new Response(JSON.stringify(payload),{headers:{'Content-Type':'application/json'}}));
+ assert.equal(r.statusCode,422);assert.match(r.body.error,/vencimiento no es una fecha válida/);
+ const d=r.body.diagnostics;assert.equal(d.status,200);assert.equal(d.method,'GET');assert.equal(d.parameters.ACCESS_TOKEN,'[OCULTO]');
+ assert.equal(d.parameters.PARAMWEBREPORT_fecha,'2026-10-15');assert.match(d.url,/composicionSaldoCliente/);
+ assert.equal(JSON.parse(d.responseBody)[0].FECHAVTO,'31-10-2026');assert.ok(!JSON.stringify(d).includes('test.token'));
+});
+test('diagnostics limit large responses and mask secret fields',()=>{
+ const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
+ const url=reportUrl('CLI',{fecha:'2026-10-15'},'test.token');
+ const body=JSON.stringify({client_secret:'do-not-show',secret_key:'also-hidden',rows:'x'.repeat(40000)});
+ const d=reportDiagnostics(url,new Response(''),body,'test.token');
+ assert.equal(d.responseBody.length,32768);assert.equal(d.responseTruncated,true);
+ assert.ok(!d.responseBody.includes('do-not-show'));assert.ok(!d.responseBody.includes('also-hidden'));
 });

@@ -260,6 +260,9 @@ label.btn input{display:none}
 .report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
 .report-grid input{width:100%;font-size:12px}
 .report-options .note{margin:8px 0 0}
+.report-diagnostics{border-top:1px solid var(--line);padding-top:10px;font-size:12px}
+.report-diagnostics summary{cursor:pointer;color:var(--brand);font-weight:600}
+.report-diagnostics pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;max-width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--f-mono);font-size:11px;user-select:text}
 button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:640px){.api-fields{grid-template-columns:minmax(0,1fr)}}
 .msg{font-size:12px} .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
@@ -790,6 +793,18 @@ function persistReportFilters(){
   try{localStorage.setItem(REPORT_FILTER_KEY,JSON.stringify({v:1,filters}));return true}catch{return false}
 }
 function syncReportDates(){document.querySelectorAll('[data-filter="fecha"]').forEach(input=>{input.value=reportToday()})}
+function reportDiagnosticsHTML(k){
+  const state=REPORT_STATE[k],d=state?.diagnostics;if(!d)return '';
+  let response=d.responseBody;try{response=JSON.stringify(JSON.parse(response),null,2)}catch{/* Keep truncated or non-JSON responses as text. */}
+  return `<details class="report-diagnostics"${state.error?' open':''}><summary>Ver llamada y respuesta de Finnegans</summary>
+    <p class="note">Método: ${esc(d.method)} · Respuesta de Finnegans: HTTP ${esc(d.status)} · ${esc(d.contentType)}</p>
+    <b>URL consultada (token oculto)</b><pre>${esc(d.url)}</pre>
+    <b>Parámetros enviados</b><pre>${esc(JSON.stringify(d.parameters,null,2))}</pre>
+    <b>Respuesta original${d.responseTruncated?' — vista parcial':''}</b><pre>${esc(response)}</pre>
+    ${d.responseTruncated?'<p class="note">Se muestran los primeros 32.768 caracteres de la respuesta.</p>':''}
+    <p class="note">Este detalle queda solo durante esta sesión y no se guarda con los datos. Contiene información del reporte; el token está oculto.</p>
+    <button type="button" class="btn" data-copy-diagnostics="${k}">Copiar detalle</button></details>`;
+}
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
   const r=REPORT_STATE[k],fields=[['fecha','Fecha del reporte'],...REPORT_FIELDS[k]];
@@ -801,13 +816,14 @@ async function obtainReport(k){
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
-  state.busy=true;state.error=false;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
+  state.busy=true;state.error=false;state.diagnostics=null;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
   try{
     const token=await freshFinnegansToken();
     filters.fecha=reportToday();
     state.message='Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
     const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
     const data=await response.json().catch(()=>null);
+    if(data?.diagnostics)state.diagnostics=data.diagnostics;
     if(!response.ok){
       if(response.status===401){clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Finnegans rechazó el token o los permisos. Obtené un token nuevo para reintentar.';FAPI.error=true}
       throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
@@ -878,7 +894,7 @@ function renderDat(){
     <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API"${REPORT_STATE[k]?.busy?' disabled':''}>${REPORT_STATE[k]?.busy?'Consultando…':'Obtener por API'}</button>
     <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
-    <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div></div>`}).join('')}</div>
+    <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
   <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes y proveedores: API disponible · otras fuentes: Excel o integración pendiente</p>
   <div class="prose"><p>Las APIs de composición de saldos ya pueden consultarse desde Clientes y Proveedores. El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
@@ -897,6 +913,11 @@ function renderDat(){
   for(const [button,field]of [['apiShowId','apiClientId'],['apiShowSecret','apiClientSecret']])$('#'+button).onclick=()=>{const input=$('#'+field),show=input.type==='password';input.type=show?'text':'password';$('#'+button).textContent=show?'Ocultar':'Mostrar';$('#'+button).setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
+  v.querySelectorAll('[data-copy-diagnostics]').forEach(button=>button.onclick=async()=>{
+    const k=button.dataset.copyDiagnostics,d=REPORT_STATE[k]?.diagnostics;if(!d)return;
+    const text=JSON.stringify({source:SRC[k].n,...d},null,2);
+    try{await navigator.clipboard.writeText(text);button.textContent='Detalle copiado'}catch{button.textContent='Seleccioná el texto de arriba para copiarlo'}
+  });
   v.querySelectorAll('[data-report]').forEach(input=>input.oninput=()=>{
     if(input.dataset.filter==='fecha'){input.value=reportToday();return}
     const k=input.dataset.report;REPORT_STATE[k].filters[input.dataset.filter]=input.value;
