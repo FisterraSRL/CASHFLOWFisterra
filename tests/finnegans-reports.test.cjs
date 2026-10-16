@@ -38,7 +38,20 @@ test('Fecha and FechaVto are dates while Vencimiento and Venc. preserve text',()
   assert.equal(r.fc,'2026-09-15');assert.equal(r.f,'2026-10-20');assert.equal(r.e,'A vencer');
  }
  assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:undefined,Vencimiento:'20/10/2026'})],'2026-10-15'),/falta vencimiento/);
- assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:'invalid',Vencimiento:'A vencer',FechaVencimientoActual:'2026-10-20'})],'2026-10-15'),/no es una fecha válida/);
+ assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:'invalid',Vencimiento:'A vencer',FechaVencimientoActual:'2026-10-20'})],'2026-10-15'),/campo FechaVto no contiene una fecha válida/);
+});
+
+test('accepts Finnegans DD-MM-YYYY dates without parsing VENCIMIENTO text',async()=>{
+ const payload=[fixture({FECHA:'13-08-2026',FECHAVTO:'12-09-2026',VENCIMIENTO:'Vencido 1 a 2 meses',FECHACASHFLOW:'08-10-2026'})];
+ const r=await invoke(req(),async()=>new Response(JSON.stringify(payload)));
+ assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].fc,'2026-08-13');
+ assert.equal(r.body.rows[0].f,'2026-09-12');assert.equal(r.body.rows[0].e,'Vencido 1 a 2 meses');
+ for(const source of ['CLI','PRV']){
+  const out=normalizeReport(source,[fixture({FECHA:'01-10-2026',FECHAVTO:'31-10-2026',CUENTA:'PROVEEDORES',VENCIMIENTO:'A vencer 0 a 1 mes'})],'2026-10-15');
+  assert.equal(out.rows[0].f,'2026-10-31');assert.equal(out.rows[0].fc,'2026-10-01');
+ }
+ for(const FECHAVTO of ['31-02-2026','29-02-2026','12-09/2026'])assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO})],'2026-10-15'),/campo FechaVto/);
+ assert.equal(normalizeReport('CLI',[fixture({FECHAVTO:'29-02-2024'})],'2026-10-15').rows[0].f,'2024-02-29');
 });
 test('missing due date uses report snapshot, not browser projection date',()=>{
  const f=fixture({FECHAVTO:undefined,DiasDeMora:12});
@@ -92,12 +105,12 @@ test('provider failures are mapped and tokens remain redacted in diagnostics',as
  assert.equal((await invoke(req(),async()=>{const e=new Error();e.name='TimeoutError';throw e})).statusCode,504);
 });
 test('invalid due dates include the actual response and masked request for diagnosis',async()=>{
- const payload=[fixture({FECHAVTO:'31-10-2026',ACCESS_TOKEN:'test.token'})];
+ const payload=[fixture({FECHAVTO:'31-02-2026',ACCESS_TOKEN:'test.token'})];
  const r=await invoke(req(),async()=>new Response(JSON.stringify(payload),{headers:{'Content-Type':'application/json'}}));
- assert.equal(r.statusCode,422);assert.match(r.body.error,/vencimiento no es una fecha válida/);
+ assert.equal(r.statusCode,422);assert.match(r.body.error,/campo FechaVto no contiene una fecha válida/);
  const d=r.body.diagnostics;assert.equal(d.status,200);assert.equal(d.method,'GET');assert.equal(d.parameters.ACCESS_TOKEN,'[OCULTO]');
  assert.equal(d.parameters.PARAMWEBREPORT_fecha,'2026-10-15');assert.match(d.url,/composicionSaldoCliente/);
- assert.equal(JSON.parse(d.responseBody)[0].FECHAVTO,'31-10-2026');assert.ok(!JSON.stringify(d).includes('test.token'));
+ assert.equal(JSON.parse(d.responseBody)[0].FECHAVTO,'31-02-2026');assert.ok(!JSON.stringify(d).includes('test.token'));
 });
 test('diagnostics limit large responses and mask secret fields',()=>{
  const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
