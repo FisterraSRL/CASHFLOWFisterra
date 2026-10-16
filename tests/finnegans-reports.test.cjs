@@ -23,10 +23,22 @@ test('normalizes official field names, USD original amount, snapshot, and compan
  const out=normalizeReport('CLI',{data:{rows:[fixture()]}},'2026-10-15');const r=out.rows[0];
  assert.equal(r.m,100);assert.equal(r.c,'USD');assert.equal(r.f,'2026-10-01');assert.equal(r.company,'Empresa de prueba');assert.match(r.id,/^CLI-/);assert.equal(out.warnings.length,0);
 });
-test('supplier current due date remains even when overdue, and signs are preserved',()=>{
+test('supplier FechaVto takes priority over other date aliases, and signs are preserved',()=>{
  const f=fixture({PROVEEDOR:'Proveedor de prueba',ORGANIZACION:undefined,CUENTA:'PROVEEDORES',MONEDA:'Pesos',IMPORTEMONPPAL:-500,FechaVencimientoActual:'2026-10-10'});
- const r=normalizeReport('PRV',[f],'2026-10-15').rows[0];assert.equal(r.f,'2026-10-10');assert.equal(r.m,-500);assert.equal(r.cat,'Proveedores');
+ const r=normalizeReport('PRV',[f],'2026-10-15').rows[0];assert.equal(r.f,'2026-10-01');assert.equal(r.m,-500);assert.equal(r.cat,'Proveedores');
  const credit=normalizeReport('PRV',[{...f,IMPORTEMONPPAL:300}],'2026-10-15').rows[0];assert.equal(credit.m,300);
+});
+
+test('Fecha and FechaVto are dates while Vencimiento and Venc. preserve text',()=>{
+ for(const source of ['CLI','PRV'])for(const field of ['Vencimiento','Venc.']){
+  const f=fixture({PROVEEDOR:'Proveedor de prueba',CUENTA:'PROVEEDORES',
+   FECHA:'15/09/2026',FECHAVTO:'20/10/2026',FechaComprobante:'invalid alias',
+   FechaVencimientoActual:'not a date',[field]:'A vencer'});
+  const r=normalizeReport(source,[f],'2026-10-15').rows[0];
+  assert.equal(r.fc,'2026-09-15');assert.equal(r.f,'2026-10-20');assert.equal(r.e,'A vencer');
+ }
+ assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:undefined,Vencimiento:'20/10/2026'})],'2026-10-15'),/falta vencimiento/);
+ assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:'invalid',Vencimiento:'A vencer',FechaVencimientoActual:'2026-10-20'})],'2026-10-15'),/no es una fecha válida/);
 });
 test('missing due date uses report snapshot, not browser projection date',()=>{
  const f=fixture({FECHAVTO:undefined,DiasDeMora:12});

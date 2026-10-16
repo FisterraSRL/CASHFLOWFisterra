@@ -82,7 +82,7 @@ La fecha del reporte es siempre el día de hoy en `America/Buenos_Aires`, es de 
 
 La llamada del navegador al servidor usa POST; el servidor realiza el GET requerido por Finnegans. El token no aparece en la URL del navegador ni se guarda con los filtros o datos. Los resultados permanecen en el navegador como las cargas de Excel.
 
-El adaptador admite filas JSON directas o dentro de contenedores `data`, `rows`, `items`, `result`, `records`, entre otros. Reconoce los campos de composición `IMPORTEMONPPAL`, `IMPORTEMONTRAN`, `FECHAVTO` y sus equivalentes del Excel. Mantiene signos, importe original USD y vencimiento actual. Si falta el vencimiento, solo lo reconstruye con mora positiva respecto de la fecha del reporte o con una condición simple en días, informándolo al usuario.
+El adaptador admite filas JSON directas o dentro de contenedores `data`, `rows`, `items`, `result`, `records`, entre otros. Reconoce los campos de composición `IMPORTEMONPPAL`, `IMPORTEMONTRAN` y sus equivalentes del Excel. En la API, `Fecha` es la fecha del comprobante y `FechaVto` la fecha de vencimiento; tienen prioridad sobre los alias del Excel. `Vencimiento` / `Venc.` se conserva como clasificación de texto, nunca como fecha. Mantiene signos e importe original USD. Si falta la fecha de vencimiento, solo la reconstruye con mora positiva respecto de la fecha del reporte o con una condición simple en días, informándolo al usuario.
 
 Se rechazan respuestas con campos obligatorios faltantes, fechas/importes inválidos, monedas no soportadas, paginación pendiente o tamaño excesivo. Una respuesta vacía o fallida conserva la carga anterior. El mapeo debe validarse con la respuesta real de la instalación; no se han usado credenciales reales en las pruebas.
 
