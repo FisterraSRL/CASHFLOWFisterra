@@ -73,10 +73,12 @@ Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar*
 Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Las otras fuentes todavía requieren configurar su integración.
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
-2. En la tarjeta, abrir **Parámetros de composición de saldos** si se necesita cambiar la fecha o agregar filtros. La fecha inicial es la fecha de corte; los demás filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
+2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
 3. Seleccionar **Obtener por API**. La app obtiene un token nuevo y luego consulta el reporte. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
 
 Parámetros comunes: fecha, organización, circuito contable, cuenta, moneda y empresa. Proveedores agrega dimensión, valor de dimensión y tipo de documento. Los nombres y mayúsculas de los parámetros se conservan según los endpoints indicados.
+
+La fecha del reporte es siempre el día de hoy en `America/Buenos_Aires`, es de solo lectura y se calcula nuevamente antes de cada consulta, después de obtener el token. No se guarda como parámetro reutilizable ni depende de la fecha de corte del flujo. Se actualiza al volver a la ventana y al cambiar el día. La fecha almacenada en los datos importados sigue indicando la fecha real de aquella consulta. Si todavía no hay filtros guardados, se recuperan los de la última carga API disponible; limpiar un filtro también persiste.
 
 La llamada del navegador al servidor usa POST; el servidor realiza el GET requerido por Finnegans. El token no aparece en la URL del navegador ni se guarda con los filtros o datos. Los resultados permanecen en el navegador como las cargas de Excel.
 

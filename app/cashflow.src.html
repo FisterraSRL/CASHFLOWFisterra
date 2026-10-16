@@ -699,21 +699,41 @@ async function restoreCredentials(){
   }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
 }
 const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']]};
-const REPORT_STATE={CLI:{filters:{},busy:false,message:'',error:false},PRV:{filters:{},busy:false,message:'',error:false}};
+const REPORT_FILTER_KEY=LS+'-report-filters';
+function reportToday(){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en',{timeZone:'America/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+  return parts.year+'-'+parts.month+'-'+parts.day;
+}
+function restoreReportFilters(){
+  let stored=null,failed=false;
+  try{stored=JSON.parse(localStorage.getItem(REPORT_FILTER_KEY)||'null')}catch{failed=true}
+  return Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>{
+    const saved=stored?.v===1&&stored.filters&&Object.prototype.hasOwnProperty.call(stored.filters,k)?stored.filters[k]:S.data[k]?.filters;
+    const filters=Object.fromEntries(fields.map(([key])=>[key,typeof saved?.[key]==='string'?saved[key].slice(0,256):'']));
+    return [k,{filters,busy:false,message:failed?'No se pudieron recuperar los parámetros guardados.':'',error:failed}];
+  }));
+}
+const REPORT_STATE=restoreReportFilters();
+function persistReportFilters(){
+  const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([key])=>[key,REPORT_STATE[k].filters[key]||'']))]));
+  try{localStorage.setItem(REPORT_FILTER_KEY,JSON.stringify({v:1,filters}));return true}catch{return false}
+}
+function syncReportDates(){document.querySelectorAll('[data-filter="fecha"]').forEach(input=>{input.value=reportToday()})}
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
   const r=REPORT_STATE[k],fields=[['fecha','Fecha del reporte'],...REPORT_FIELDS[k]];
-  return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label><input id="report-${k}-${key}" data-report="${k}" data-filter="${key}" type="${key==='fecha'?'date':'text'}" value="${esc(r.filters[key]??(key==='fecha'?S.ref:''))}"${key==='fecha'?' required':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}${r.busy?' disabled':''}></div>`).join('')}</div><p class="note">Se usa la fecha de corte salvo que la cambies aquí. Los filtros vacíos se omiten; completá los códigos que requiera tu reporte de Finnegans.</p></details>`;
+  return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label><input id="report-${k}-${key}" data-report="${k}" data-filter="${key}" type="${key==='fecha'?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}${r.busy?' disabled':''}></div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha siempre es hoy (hora de Argentina) y se actualiza automáticamente. Los filtros vacíos se omiten.</p></details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return;
-  const filters={fecha:S.ref,...state.filters};
+  const filters={...state.filters,fecha:reportToday()};
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
   state.busy=true;state.error=false;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
   try{
     const token=await freshFinnegansToken();
+    filters.fecha=reportToday();
     state.message='Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
     const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
     const data=await response.json().catch(()=>null);
@@ -806,7 +826,11 @@ function renderDat(){
   for(const [button,field]of [['apiShowId','apiClientId'],['apiShowSecret','apiClientSecret']])$('#'+button).onclick=()=>{const input=$('#'+field),show=input.type==='password';input.type=show?'text':'password';$('#'+button).textContent=show?'Ocultar':'Mostrar';$('#'+button).setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
-  v.querySelectorAll('[data-report]').forEach(input=>input.oninput=()=>{REPORT_STATE[input.dataset.report].filters[input.dataset.filter]=input.value});
+  v.querySelectorAll('[data-report]').forEach(input=>input.oninput=()=>{
+    if(input.dataset.filter==='fecha'){input.value=reportToday();return}
+    const k=input.dataset.report;REPORT_STATE[k].filters[input.dataset.filter]=input.value;
+    if(!persistReportFilters()){REPORT_STATE[k].error=true;REPORT_STATE[k].message='No se pudieron guardar los parámetros. Verificá que el navegador permita almacenar datos de este sitio.';const msg=$('#msg-'+k);msg.className='msg err';msg.textContent=REPORT_STATE[k].message}
+  });
   v.querySelectorAll('[data-api]').forEach(b=>b.onclick=()=>{
     const k=b.dataset.api,msg=$('#msg-'+k);msg.className='msg';
     if(!FAPI.clientId.trim()||!FAPI.clientSecret.trim()){
@@ -892,6 +916,9 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>setTab(b.d
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='res')renderRes()},150)});
 setTab(S.tab);renderAll();
 restoreCredentials();
+addEventListener('focus',syncReportDates);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates()});
+setInterval(syncReportDates,60000);
 </script>
 </body>
 </html>
