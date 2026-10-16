@@ -782,9 +782,11 @@ async function obtainReport(k){
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
-  state.busy=true;state.error=false;state.message='Consultando composición de saldos en Finnegans…';renderDat();
+  state.busy=true;state.error=false;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
   try{
-    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:FAPI.token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
+    const token=await freshFinnegansToken();
+    state.message='Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
+    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
     const data=await response.json().catch(()=>null);
     if(!response.ok){
       if(response.status===401){clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Finnegans rechazó el token o los permisos. Obtené un token nuevo para reintentar.';FAPI.error=true}
@@ -802,14 +804,15 @@ function apiSection(){
   const active=!!FAPI.token&&FAPI.expiresAt>Date.now();
   return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':'Sin conexión'}</span></div>
     <form id="finnegansForm" autocomplete="off">
-      <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><input id="apiClientId" name="client_id" type="text" value="${esc(FAPI.clientId)}" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}></div>
+      <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><div class="api-secret"><input id="apiClientId" name="client_id" type="password" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowId" aria-controls="apiClientId" aria-pressed="false">Mostrar</button></div></div>
       <div class="fld"><label for="apiClientSecret">Client_Secret</label><div class="api-secret"><input id="apiClientSecret" name="client_secret" type="password" placeholder="Ingresá tu Client_Secret" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowSecret" aria-controls="apiClientSecret" aria-pressed="false">Mostrar</button></div></div></div>
       <p class="note">Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan automáticamente, cifrados en este navegador. El token se elimina al recargar o cerrar la página.</p>
-      <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Obteniendo token…':active?'Renovar token':'Obtener token'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
+      <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Probando conexión…':'Probar conexión'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
     <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>
     <div id="apiMessage" class="msg api-message${FAPI.error?' err':active?' ok':''}" role="status" aria-live="polite">${esc(FAPI.message)}</div>
-    ${active?`<p class="note">Vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}. Usá Obtener por API en Clientes o Proveedores para consultar sus saldos.</p>`:''}
+    <p class="note">Cada consulta de datos obtiene automáticamente un token nuevo con estas credenciales. No hace falta probar la conexión antes de consultar.</p>
+    ${active?`<p class="note">Último token vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}.</p>`:''}
     <p class="note">La obtención del token está disponible en la versión web. Las cargas de Excel siguen disponibles debajo.</p>
   </div>`}
 async function requestFinnegansToken(e){
@@ -817,10 +820,17 @@ async function requestFinnegansToken(e){
   if(location.protocol==='file:'){FAPI.message='Abrí la versión web de Cashflow para obtener el token de Finnegans.';FAPI.error=true;renderDat();return}
   const clientId=$('#apiClientId').value.trim(),secret=$('#apiClientSecret').value;
   if(!clientId||!secret.trim())return;
-  FAPI.clientId=clientId;FAPI.clientSecret=secret;FAPI.busy=true;FAPI.error=false;FAPI.message='Solicitando el token a Finnegans…';
+  FAPI.clientId=clientId;FAPI.clientSecret=secret;
+  try{await freshFinnegansToken()}catch{/* The connection panel already displays the error. */}
+}
+async function freshFinnegansToken(){
+  const clientId=FAPI.clientId.trim(),secret=FAPI.clientSecret;
+  if(!clientId||!secret.trim())throw new Error('Completá Client_ID y Client_Secret para consultar Finnegans.');
+  if(location.protocol==='file:')throw new Error('Abrí la versión web para consultar Finnegans.');
+  FAPI.authPending=(FAPI.authPending||0)+1;FAPI.busy=true;FAPI.error=false;FAPI.message='Solicitando un token nuevo a Finnegans…';
   clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;
   const payload=JSON.stringify({client_id:clientId,client_secret:secret});
-  renderDat();
+  if(S.tab==='dat')renderDat();
   try{
     await persistCredentials();
     const response=await fetch('/api/finnegans-token',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,cache:'no-store',signal:AbortSignal.timeout(25000)});
@@ -828,10 +838,12 @@ async function requestFinnegansToken(e){
     if(!response.ok)throw new Error(data&&data.error||'No se pudo obtener el token. Intentá nuevamente.');
     if(!data||typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=0)throw new Error('Finnegans devolvió una respuesta de autenticación no válida.');
     FAPI.token=data.access_token;FAPI.expiresAt=Date.now()+Math.min(data.expires_in,3600)*1000;
-    FAPI.message='Token obtenido correctamente. Ya podés continuar con la configuración de las fuentes API.';
-    FAPI.timer=setTimeout(()=>{FAPI.token='';FAPI.expiresAt=0;FAPI.message='El token venció. Seleccioná Obtener token para continuar con las credenciales guardadas.';if(S.tab==='dat')renderDat()},Math.max(0,FAPI.expiresAt-Date.now()));
-  }catch(err){FAPI.error=true;FAPI.message=err.name==='TimeoutError'||err.name==='AbortError'?'La solicitud demoró demasiado. Intentá nuevamente.':err instanceof TypeError?'No se pudo conectar. Revisá tu conexión e intentá nuevamente.':err.message}
-  finally{FAPI.busy=false;if(S.tab==='dat')renderDat()}
+    FAPI.message='Conexión con Finnegans verificada correctamente.';
+    clearTimeout(FAPI.timer);
+    FAPI.timer=setTimeout(()=>{FAPI.token='';FAPI.expiresAt=0;FAPI.message='El último token venció. La próxima consulta obtendrá uno nuevo automáticamente.';if(S.tab==='dat')renderDat()},Math.max(0,FAPI.expiresAt-Date.now()));
+    return data.access_token;
+  }catch(err){FAPI.error=true;FAPI.message=err.name==='TimeoutError'||err.name==='AbortError'?'La solicitud demoró demasiado. Intentá nuevamente.':err instanceof TypeError?'No se pudo conectar. Revisá tu conexión e intentá nuevamente.':err.message;throw new Error(FAPI.message)}
+  finally{FAPI.authPending--;FAPI.busy=FAPI.authPending>0;if(S.tab==='dat')renderDat()}
 }
 function renderDat(){
   const v=$('#v-dat');
@@ -856,27 +868,28 @@ function renderDat(){
   <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   $('#finnegansForm').onsubmit=requestFinnegansToken;
+  $('#apiClientId').value=FAPI.clientId;
   $('#apiClientSecret').value=FAPI.clientSecret;
   $('#apiClientId').oninput=$('#apiClientSecret').oninput=credentialsChanged;
   $('#apiClientId').onchange=$('#apiClientSecret').onchange=()=>{credentialsChanged();if(FAPI.clientId.trim()&&FAPI.clientSecret.trim())persistCredentials()};
   $('#apiSaveCredentials').onclick=()=>{credentialsChanged();persistCredentials()};
   $('#apiForgetCredentials').onclick=forgetCredentials;
-  $('#apiShowSecret').onclick=()=>{const input=$('#apiClientSecret'),show=input.type==='password';input.type=show?'text':'password';$('#apiShowSecret').textContent=show?'Ocultar':'Mostrar';$('#apiShowSecret').setAttribute('aria-pressed',show)};
+  for(const [button,field]of [['apiShowId','apiClientId'],['apiShowSecret','apiClientSecret']])$('#'+button).onclick=()=>{const input=$('#'+field),show=input.type==='password';input.type=show?'text':'password';$('#'+button).textContent=show?'Ocultar':'Mostrar';$('#'+button).setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
   v.querySelectorAll('[data-report]').forEach(input=>input.oninput=()=>{REPORT_STATE[input.dataset.report].filters[input.dataset.filter]=input.value});
   v.querySelectorAll('[data-api]').forEach(b=>b.onclick=()=>{
     const k=b.dataset.api,msg=$('#msg-'+k);msg.className='msg';
-    if(!FAPI.token||FAPI.expiresAt<=Date.now()){
-      msg.textContent='Primero obtené un token vigente en Conexión API con Finnegans.';
+    if(!FAPI.clientId.trim()||!FAPI.clientSecret.trim()){
+      msg.textContent='Primero completá Client_ID y Client_Secret en Conexión API con Finnegans.';
       $('#finnegansForm').scrollIntoView({block:'center'});
       (FAPI.clientId?$('#apiClientSecret'):$('#apiClientId')).focus({preventScroll:true});
-      FAPI.message='Para obtener '+SRC[k].n+' por API, primero ingresá las credenciales y obtené el token.';
+      FAPI.message='Para obtener '+SRC[k].n+' por API, ingresá las credenciales. El token se obtendrá automáticamente.';
       $('#apiMessage').textContent=FAPI.message;$('#apiMessage').className='msg api-message';
       return;
     }
     if(REPORT_FIELDS[k]){obtainReport(k);return}
-    msg.textContent='El token está vigente. Falta configurar la API de '+SRC[k].n+' para importar los datos.';
+    msg.textContent='Falta configurar la API de '+SRC[k].n+'. Al habilitarla se obtendrá un token nuevo antes de consultar.';
   });
   v.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{loadExample(b.dataset.ex);renderAll()});
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});

@@ -52,7 +52,7 @@ Los cambios enviados a `main` disparan el despliegue si está activa la integrac
 
 ## Conexión API con Finnegans
 
-En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_KEY` en Finnegans) y seleccionar **Obtener token**.
+En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_KEY` en Finnegans). Ambos se muestran ocultos por defecto y tienen su propio botón **Mostrar / Ocultar**. **Probar conexión** permite comprobar las credenciales sin importar datos.
 
 La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el servidor ni los logs de la aplicación.
 
@@ -60,19 +60,21 @@ Las credenciales se guardan automáticamente en el navegador y también mediante
 
 **Olvidar credenciales** elimina las credenciales y su clave local, vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token, conservando las credenciales. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
 
-El token se conserva únicamente en memoria de la página durante hasta una hora. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans. **Obtener token** y **Renovar token** utilizan los campos recuperados, sin necesidad de volver a escribir las credenciales.
+Cada consulta de datos solicita un token nuevo con las credenciales recuperadas, aunque exista otro token vigente. El token recién obtenido se pasa a la función del reporte, que lo agrega como parámetro `ACCESS_TOKEN` a la URL de Finnegans. Cada consulta conserva su propio token, incluso cuando se consultan dos fuentes a la vez. Si falla la autenticación, no se consulta el reporte ni se reemplazan datos.
+
+El último token se conserva únicamente en memoria de la página durante hasta una hora para mostrar el estado de conexión. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans ni impide que la próxima consulta obtenga uno nuevo.
 
 La autenticación requiere la versión desplegada en Vercel; abrir el HTML local mantiene las funciones de Excel, pero no ejecuta la función de servidor.
 
-Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar**. El botón API guía a obtener un token si falta. **Quitar** se deshabilita cuando la fuente no tiene datos.
+Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar**. El botón API guía a completar las credenciales si faltan. **Quitar** se deshabilita cuando la fuente no tiene datos.
 
 ### Composición de saldos por API
 
 Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Las otras fuentes todavía requieren configurar su integración.
 
-1. Obtener el token.
+1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** si se necesita cambiar la fecha o agregar filtros. La fecha inicial es la fecha de corte; los demás filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
-3. Seleccionar **Obtener por API**. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
+3. Seleccionar **Obtener por API**. La app obtiene un token nuevo y luego consulta el reporte. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
 
 Parámetros comunes: fecha, organización, circuito contable, cuenta, moneda y empresa. Proveedores agrega dimensión, valor de dimensión y tipo de documento. Los nombres y mayúsculas de los parámetros se conservan según los endpoints indicados.
 
