@@ -57,6 +57,13 @@ test('missing due date uses report snapshot, not browser projection date',()=>{
  const f=fixture({FECHAVTO:undefined,DiasDeMora:12});
  const out=normalizeReport('CLI',[f],'2026-10-13');assert.equal(out.rows[0].f,'2026-10-01');assert.equal(out.warnings.length,1);
 });
+
+test('supplier current-account names are classified as Proveedores while other accounts stay distinct',()=>{
+ for(const [CUENTA,cat]of [['Proveedores en Cta. Cte.','Proveedores'],['Proveedores comerciales','Proveedores'],['Leasing','Leasing'],['Proveedores leasing','Leasing'],['Fondo fijo','Fondo fijo'],['Socios','Retiros de socios'],['Otras obligaciones','Otras deudas']]){
+  const r=normalizeReport('PRV',[fixture({CUENTA,MONEDA:'Pesos',IMPORTEMONPPAL:-100})],'2026-10-20').rows[0];
+  assert.equal(r.cat,cat);assert.equal(r.m,-100);assert.equal(r.account,CUENTA);
+ }
+});
 test('simple terms allow inference but ambiguous multi-installment terms do not',()=>{
  const f=fixture({FECHAVTO:undefined,CondicionPago:'30 días FF'});
  assert.equal(normalizeReport('CLI',[f],'2026-10-15').rows[0].f,'2026-10-01');

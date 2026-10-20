@@ -1,6 +1,7 @@
 'use strict';
 const {reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs');
 const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
+const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');
@@ -12,7 +13,12 @@ module.exports=async function handler(req,res){
   if(Number(req.headers['content-length'])>24000)return res.status(413).json({error:'La solicitud es demasiado grande.'});
   let body=req.body;
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>24000)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
-  const token=body?.access_token;
+  const shared=body?.shared===true,config=shared?sharedConfig():null;
+  if(shared&&(!['CLI','PRV'].includes(body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros de empresa y cuenta en Vercel.'});
+  // Shared callers can never widen the configured company/account scope.
+  if(shared)body.filters={...config.sources[body.source].filters,fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
+  let token=body?.access_token;
+  if(shared){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
   if(typeof token!=='string'||!token||token.length>16384||!/^[A-Za-z0-9._~+\/-]+=*$/.test(token))return res.status(400).json({error:'Obtené un token válido antes de consultar el reporte.'});
   let url;
   try{url=reportUrl(body.source,body.filters,token)}catch(error){return res.status(400).json({error:error.message})}

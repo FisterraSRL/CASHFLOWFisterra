@@ -55,6 +55,7 @@ nav.tabs button[aria-selected=true]{color:var(--accent-ink);background:var(--fs-
 button:focus-visible,input:focus-visible,select:focus-visible,td.clk:focus-visible,.day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radius-panel);background:#f1f2f577;box-shadow:var(--fs-shadow-panel)}
 .banner{background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;margin-top:12px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#storageMessage[hidden]{display:none}
 .chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
 .chip.ej{background:var(--warn);color:#2a1d00;border-color:transparent}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
@@ -219,7 +220,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.0">v1.0.0</span>
+    <span class="app-version" aria-label="Versión 1.0.1">v1.0.1</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -242,6 +243,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <label class="chk"><input type="checkbox" id="pChq"> Incluir cheques emitidos vencidos sin conciliar</label>
 </div>
 <div id="exBanner"></div>
+<div id="storageMessage" class="banner" role="status" hidden></div>
 
 <nav class="tabs" role="tablist">
   <button role="tab" data-t="res">Resumen</button>
@@ -285,7 +287,7 @@ function freshData(){return{
   PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJE:{rows:[]}}}
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
 if(!S.data)S.data=freshData();
-function save(){try{localStorage.setItem(LS,JSON.stringify({v:1,S}))}catch(e){}}
+function save(){const msg=document.querySelector('#storageMessage');try{localStorage.setItem(LS,JSON.stringify({v:1,S}));if(msg)msg.hidden=true;return true}catch(e){if(msg){msg.hidden=false;msg.textContent='No se pudieron guardar los datos en este navegador. La carga sigue disponible en esta pestaña, pero puede perderse al cerrarla. Revisá el espacio y los permisos de almacenamiento del sitio.'}return false}}
 
 /* ---------- utilidades ---------- */
 const $=s=>document.querySelector(s);
@@ -667,9 +669,27 @@ const CredentialVault=(()=>{
   };
 })();
 const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
+let credentialsReady=Promise.resolve();
+const SHARED={enabled:false,sources:{},message:'',error:false,busy:false};
+async function restoreSharedConnection(){
+  if(location.protocol==='file:')return;
+  try{
+    const response=await fetch('/api/finnegans-config',{cache:'no-store',signal:AbortSignal.timeout(10000)});
+    if(!response.ok)return;const config=await response.json();
+    if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
+    SHARED.enabled=true;SHARED.sources=config.sources;
+    for(const k of ['CLI','PRV'])if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
+    renderAll();
+    await Promise.all(['CLI','PRV'].filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
+  }catch{/* Local mode remains available if shared configuration cannot be reached. */}
+}
+async function testSharedConnection(){
+  if(SHARED.busy)return;SHARED.busy=true;SHARED.error=false;SHARED.message='Probando conexión compartida…';renderDat();
+  try{const r=await fetch('/api/finnegans-config',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(25000)});const result=await r.json();if(!r.ok||!result.connected)throw new Error(result.error||'No se pudo verificar la conexión.');SHARED.message='Conexión compartida con Finnegans verificada.'}catch(e){SHARED.error=true;SHARED.message=e.message}finally{SHARED.busy=false;if(S.tab==='dat')renderDat()}
+}
 function credentialMessage(message,error=false){FAPI.credsMessage=message;FAPI.credsError=error;const node=$('#apiCredentialMessage');if(node){node.textContent=message;node.className='msg api-message'+(error?' err':'')}}
 async function persistCredentials(){
-  clearTimeout(FAPI.saveTimer);
+  clearTimeout(FAPI.saveTimer);FAPI.saveTimer=null;
   const value={clientId:FAPI.clientId.trim(),clientSecret:FAPI.clientSecret},version=FAPI.credsVersion;
   if(!value.clientId||!value.clientSecret.trim()){credentialMessage('Completá ambas credenciales para guardarlas.');return false}
   credentialMessage('Guardando credenciales…');
@@ -699,7 +719,7 @@ async function restoreCredentials(){
     if(value&&version===FAPI.credsVersion){
       FAPI.clientId=value.clientId;FAPI.clientSecret=value.clientSecret;FAPI.saved=true;
       credentialMessage('Credenciales recuperadas de este navegador.');
-      if(S.tab==='dat'){$('#apiClientId').value=FAPI.clientId;$('#apiClientSecret').value=FAPI.clientSecret}
+      if(S.tab==='dat'&&$('#apiClientId')){$('#apiClientId').value=FAPI.clientId;$('#apiClientSecret').value=FAPI.clientSecret}
     }
   }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
 }
@@ -738,25 +758,27 @@ function reportDiagnosticsHTML(k){
 }
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
+  if(SHARED.enabled)return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p></details>`;
   const r=REPORT_STATE[k],fields=[['fecha','Fecha del reporte'],...REPORT_FIELDS[k]];
   return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label><input id="report-${k}-${key}" data-report="${k}" data-filter="${key}" type="${key==='fecha'?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}${r.busy?' disabled':''}></div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha siempre es hoy (hora de Argentina) y se actualiza automáticamente. Los filtros vacíos se omiten.</p></details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return;
-  const filters={...state.filters,fecha:reportToday()};
+  const shared=SHARED.enabled&&!!SHARED.sources[k];
+  const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:reportToday()};
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
   state.busy=true;state.error=false;state.diagnostics=null;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
   try{
-    const token=await freshFinnegansToken();
+    const token=shared?null:await freshFinnegansToken();
     filters.fecha=reportToday();
     state.message='Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
-    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(35000)});
+    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
     const data=await response.json().catch(()=>null);
     if(data?.diagnostics)state.diagnostics=data.diagnostics;
     if(!response.ok){
-      if(response.status===401){clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Finnegans rechazó el token o los permisos. Obtené un token nuevo para reintentar.';FAPI.error=true}
+      if(response.status===401&&!shared){clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Finnegans rechazó el token o los permisos. Obtené un token nuevo para reintentar.';FAPI.error=true}
       throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
     }
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
@@ -765,15 +787,16 @@ async function obtainReport(k){
     clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
   }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message}
-  finally{state.busy=false;if(S.tab==='dat')renderDat()}
+  finally{state.busy=false;renderAll()}
 }
 function apiSection(){
+  if(SHARED.enabled)return `<div class="card api-card"><h2>Conexión compartida con Finnegans</h2><p class="sub">Credenciales configuradas en Vercel · disponibles desde cualquier navegador o computadora.</p><p class="note">El servidor obtiene un token nuevo por consulta. Client_ID y Client_Secret no se envían al navegador. Los filtros compartidos se administran en Vercel. Las cargas de Excel y simulaciones siguen guardándose en cada navegador.</p><p class="note">Fuentes habilitadas: ${esc(Object.keys(SHARED.sources).map(k=>SRC[k]?.n||k).join(', ')||'ninguna; falta configurar empresa y cuenta de cada reporte en Vercel')}.</p><button type="button" class="btn pri" id="testSharedConnection"${SHARED.busy?' disabled':''}>Probar conexión</button><div class="msg${SHARED.error?' err':''}" role="status">${esc(SHARED.message)}</div></div>`;
   const active=!!FAPI.token&&FAPI.expiresAt>Date.now();
-  return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':'Sin conexión'}</span></div>
+  return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':FAPI.clientId&&FAPI.clientSecret?'Credenciales disponibles':'Sin credenciales'}</span></div>
     <form id="finnegansForm" autocomplete="off">
       <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><div class="api-secret"><input id="apiClientId" name="client_id" type="password" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowId" aria-controls="apiClientId" aria-pressed="false">Mostrar</button></div></div>
       <div class="fld"><label for="apiClientSecret">Client_Secret</label><div class="api-secret"><input id="apiClientSecret" name="client_secret" type="password" placeholder="Ingresá tu Client_Secret" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowSecret" aria-controls="apiClientSecret" aria-pressed="false">Mostrar</button></div></div></div>
-      <p class="note">Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan automáticamente, cifrados en este navegador. El token se elimina al recargar o cerrar la página.</p>
+      <p class="note">Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan automáticamente, cifrados en este navegador y para este dominio. No se comparten con otros navegadores ni computadoras. El token se elimina al recargar; la próxima consulta obtiene uno nuevo con las credenciales guardadas.</p>
       <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Probando conexión…':'Probar conexión'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
     <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>
@@ -791,6 +814,7 @@ async function requestFinnegansToken(e){
   try{await freshFinnegansToken()}catch{/* The connection panel already displays the error. */}
 }
 async function freshFinnegansToken(){
+  await credentialsReady;
   const clientId=FAPI.clientId.trim(),secret=FAPI.clientSecret;
   if(!clientId||!secret.trim())throw new Error('Completá Client_ID y Client_Secret para consultar Finnegans.');
   if(location.protocol==='file:')throw new Error('Abrí la versión web para consultar Finnegans.');
@@ -834,6 +858,7 @@ function renderDat(){
   <li><b>Ejecutado y saldos bancarios</b>: movimientos de tesorería y saldo de cada cuenta al cierre del día anterior.</li></ul>
   <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
+  if($('#finnegansForm')){
   $('#finnegansForm').onsubmit=requestFinnegansToken;
   $('#apiClientId').value=FAPI.clientId;
   $('#apiClientSecret').value=FAPI.clientSecret;
@@ -843,6 +868,8 @@ function renderDat(){
   $('#apiForgetCredentials').onclick=forgetCredentials;
   for(const [button,field]of [['apiShowId','apiClientId'],['apiShowSecret','apiClientSecret']])$('#'+button).onclick=()=>{const input=$('#'+field),show=input.type==='password';input.type=show?'text':'password';$('#'+button).textContent=show?'Ocultar':'Mostrar';$('#'+button).setAttribute('aria-pressed',show)};
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
+  }
+  if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
   v.querySelectorAll('[data-copy-diagnostics]').forEach(button=>button.onclick=async()=>{
     const k=button.dataset.copyDiagnostics,d=REPORT_STATE[k]?.diagnostics;if(!d)return;
@@ -854,8 +881,10 @@ function renderDat(){
     const k=input.dataset.report;REPORT_STATE[k].filters[input.dataset.filter]=input.value;
     if(!persistReportFilters()){REPORT_STATE[k].error=true;REPORT_STATE[k].message='No se pudieron guardar los parámetros. Verificá que el navegador permita almacenar datos de este sitio.';const msg=$('#msg-'+k);msg.className='msg err';msg.textContent=REPORT_STATE[k].message}
   });
-  v.querySelectorAll('[data-api]').forEach(b=>b.onclick=()=>{
+  v.querySelectorAll('[data-api]').forEach(b=>b.onclick=async()=>{
+    await credentialsReady;
     const k=b.dataset.api,msg=$('#msg-'+k);msg.className='msg';
+    if(SHARED.enabled){if(SHARED.sources[k]){obtainReport(k);return}msg.textContent='Esta fuente no está configurada en la conexión compartida de Vercel.';return}
     if(!FAPI.clientId.trim()||!FAPI.clientSecret.trim()){
       msg.textContent='Primero completá Client_ID y Client_Secret en Conexión API con Finnegans.';
       $('#finnegansForm').scrollIntoView({block:'center'});
@@ -915,7 +944,7 @@ function loadExample(k){const ref=S.ref,o=[];const mAdd=(s,n,day)=>{const d=D(s)
   clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:todayISO};save()}
 
 /* ---------- shell ---------- */
-function setTab(t){S.tab=t;save();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
+function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;save();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
 function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,ppt:renderPpt,dat:renderDat})[S.tab]()}
 function renderAll(){
@@ -937,8 +966,16 @@ $('#pChq').onchange=e=>{S.incChq=e.target.checked;save();renderAll()};
 document.querySelectorAll('#pGran button').forEach(b=>b.onclick=()=>{S.gran=b.dataset.g;save();renderAll()});
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='res')renderRes()},150)});
+// Repair previously imported API suppliers without discarding documents or scenarios.
+if(S.data.PRV.orig==='Finnegans · API')for(const r of S.data.PRV.rows){
+  if(r.cat==='Otras deudas'&&nk(r.account||'').startsWith('proveedor')&&!/leasing|fondo fijo|socio/.test(nk(r.account||''))){
+    const oldKey=r.cat+'|'+r.p;r.cat='Proveedores';
+    if((S.excl||[]).includes(oldKey)&&!S.excl.includes(r.cat+'|'+r.p))S.excl.push(r.cat+'|'+r.p);
+  }
+}
+credentialsReady=restoreCredentials().finally(()=>{if(S.tab==='dat')renderDat()});
 setTab(S.tab);renderAll();
-restoreCredentials();
+restoreSharedConnection();
 addEventListener('focus',syncReportDates);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates()});
 setInterval(syncReportDates,60000);

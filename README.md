@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.0**, visible en el encabezado de la aplicación y registrada en Git como `v1.0.0`. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.1**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -59,6 +59,29 @@ En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_
 La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el servidor ni los logs de la aplicación.
 
 Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. Al volver a abrir el sitio se recuperan ambos campos; el secreto sigue oculto. Esta persistencia corresponde al navegador y al dominio utilizados: no se sincroniza entre dispositivos. El cifrado local no sustituye la seguridad del navegador y del equipo ni protege de código malicioso ejecutado dentro del mismo origen.
+
+Las cargas de clientes, proveedores y demás fuentes también se guardan en ese navegador. Publicar en Vercel no las convierte en datos compartidos: otro navegador o computadora tiene su almacenamiento propio. No hay una base central de cargas ni inicio de sesión. Los fallos al guardar cargas se muestran en una alerta visible.
+
+Las cuentas API como `Proveedores en Cta. Cte.` se muestran en la categoría **Proveedores**. Las cargas API anteriores con esa cuenta se reclasifican al abrir la versión 1.0.1, conservando documentos, fechas y escenarios.
+
+### Conexión compartida entre computadoras (desarrollo sin login)
+
+Para que un navegador nuevo pueda consultar clientes y proveedores sin volver a ingresar credenciales, configurar estas variables en **Vercel → proyecto CASHFLOWFisterra → Settings → Environment Variables**, para **Production**, y volver a desplegar:
+
+| Variable | Valor |
+| --- | --- |
+| `FINNEGANS_CLIENT_ID` | Client_ID del usuario de integración |
+| `FINNEGANS_CLIENT_SECRET` | Client_Secret / SECRET_KEY del mismo usuario |
+| `FINNEGANS_CLI_FILTERS` | `{"empresa":"EMPRE01","cuenta":"DxVta","moneda":"PES"}` |
+| `FINNEGANS_PRV_FILTERS` | `{"empresa":"EMPRE01","cuenta":"2.1.1/01/01","moneda":"PES"}` |
+
+Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para habilitar cada fuente y no permite ampliarlas desde el navegador. La fecha se calcula en el servidor con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por el reporte dentro del JSON.
+
+`GET /api/finnegans-config` informa si está habilitada la conexión y sus filtros; no devuelve credenciales ni tokens. **Probar conexión** valida las credenciales desde el servidor sin devolver el token. Cada consulta compartida obtiene un token nuevo desde Vercel y lo usa para consultar el reporte. No guardar las credenciales en GitHub ni en variables con prefijo público.
+
+Con las variables configuradas, la app muestra **Conexión compartida con Finnegans** y carga automáticamente ambas fuentes en navegadores sin cargas propias. Las credenciales locales existentes se conservan, pero no son necesarias para las fuentes compartidas. Sin esas variables, se mantiene el modo local anterior.
+
+Esta modalidad no tiene login: cualquier persona con acceso a la URL puede consultar los reportes habilitados. Los datos se vuelven a obtener desde Finnegans; las cargas de Excel, exclusiones y reprogramaciones no se sincronizan entre computadoras. El botón local **Guardar credenciales** no modifica las variables de Vercel.
 
 **Olvidar credenciales** elimina las credenciales y su clave local, vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token, conservando las credenciales. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
 
