@@ -220,7 +220,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.6">v1.0.6</span>
+    <span class="app-version" aria-label="Versión 1.0.7">v1.0.7</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -274,7 +274,8 @@ const SRC={
   LEA:{n:'Leasing',d:'Cuotas futuras de contratos de leasing aún no facturadas.',tpl:['Entidad','Contrato','Fecha vto','Cuota','Moneda']},
   ARCA:{n:'Planes de pago ARCA',d:'Cuotas de planes de facilidades de pago.',tpl:['Plan','Cuota','Fecha vto','Importe']},
   PPTO:{n:'Presupuesto',d:'Presupuesto financiero mensual por categoría.',tpl:['Mes','Categoría','Importe']},
-  EJE:{n:'Ejecutado',d:'Cobros y pagos reales del mes por categoría.',tpl:['Mes','Categoría','Importe']}
+  EJC:{n:'Cobros ejecutados',d:'Cobros reales del mes por categoría de ingreso.',tpl:['Mes','Categoría','Importe']},
+  EJP:{n:'Pagos ejecutados',d:'Pagos reales del mes por categoría de egreso.',tpl:['Mes','Categoría','Importe']}
 };
 const LS='cf-ghn-v1';
 const todayISO=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
@@ -284,9 +285,17 @@ function freshData(){return{
   PRV:{rows:RAW.mov.filter(r=>r.s==='PRV'),orig:'Finnegans · Excel',at:RAW.ref},
   CHP:{rows:RAW.mov.filter(r=>r.s==='CHP'),orig:'Finnegans · Excel',at:RAW.ref},
   CHT:{rows:RAW.cartera,orig:'Finnegans · Excel',at:RAW.ref},
-  PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJE:{rows:[]}}}
+  PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJC:{rows:[]},EJP:{rows:[]}}}
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
 if(!S.data)S.data=freshData();
+// Split legacy executed imports once; keep the original snapshot as a migration backup.
+if(S.data.EJE){
+  const legacy=S.data.EJE,rows=legacy.rows||[];
+  if(!S.data.EJC)S.data.EJC={...legacy,rows:rows.filter(r=>CATS_IN.includes(r.cat))};
+  if(!S.data.EJP)S.data.EJP={...legacy,rows:rows.filter(r=>CATS_OUT.includes(r.cat))};
+  S.legacyExecuted=legacy;delete S.data.EJE;
+}
+for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
 function save(){const msg=document.querySelector('#storageMessage');try{localStorage.setItem(LS,JSON.stringify({v:1,S}));if(msg)msg.hidden=true;return true}catch(e){if(msg){msg.hidden=false;msg.textContent='No se pudieron guardar los datos en este navegador. La carga sigue disponible en esta pestaña, pero puede perderse al cerrarla. Revisá el espacio y los permisos de almacenamiento del sitio.'}return false}}
 
 /* ---------- utilidades ---------- */
@@ -592,22 +601,23 @@ function renderVen(){
 
 /* ---------- PRESUPUESTO ---------- */
 function renderPpt(){
-  const v=$('#v-ppt'),P=S.data.PPTO.rows,E=S.data.EJE.rows;
+  const v=$('#v-ppt'),P=S.data.PPTO.rows,E=[...S.data.EJC.rows,...S.data.EJP.rows];
   if(!P.length){v.innerHTML=`<div class="card empty"><div class="h2">Todavía no hay presupuesto cargado</div><p>Subí el presupuesto mensual por categoría (columnas <b>Mes · Categoría · Importe</b>) para compararlo con lo proyectado desde Finnegans y con lo ejecutado.</p>
     <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn pri" id="goDat">Ir a Datos y fuentes</button><button class="btn" id="exPpt">Cargar ejemplo</button></div></div>`;
-    $('#goDat').onclick=()=>setTab('dat');$('#exPpt').onclick=()=>{loadExample('PPTO');loadExample('EJE');renderAll()};return}
+    $('#goDat').onclick=()=>setTab('dat');$('#exPpt').onclick=()=>{loadExample('PPTO');loadExample('EJC');loadExample('EJP');renderAll()};return}
   const months=[...new Set([...P,...E].map(r=>r.mes))].sort();if(!S.pptM||!months.includes(S.pptM))S.pptM=months.includes(S.ref.slice(0,7))?S.ref.slice(0,7):months[0];
   const m=S.pptM;
   const proj={};for(const r of flowMovs()){const k=(r.f<S.ref?S.ref:r.f).slice(0,7);if(k!==m)continue;proj[r.cat]=(proj[r.cat]||0)+ars(r)}
   const sum=(L,cat)=>L.filter(r=>r.mes===m&&r.cat===cat).reduce((a,r)=>a+r.imp,0);
   const cats=[...CATS_IN,...CATS_OUT].filter(c=>P.some(r=>r.cat===c)||E.some(r=>r.cat===c)||proj[c]);
-  const hasE=E.some(r=>r.mes===m);
-  const rowsH=cats.map(c=>{const sg=isIn(c)?1:-1;const pp=sum(P,c)*sg,ej=sum(E,c)*sg,pr=proj[c]||0;const real=hasE?ej:pr;const dv=real-pp;const pct=pp?dv/Math.abs(pp):null;
+  const hasCollections=S.data.EJC.rows.some(r=>r.mes===m),hasPayments=S.data.EJP.rows.some(r=>r.mes===m),hasE=hasCollections||hasPayments;
+  const partial=hasE&&(!hasCollections||!hasPayments)?`<p class="note">Ejecutado parcial: faltan ${hasCollections?'pagos':'cobros'} ejecutados para este mes. Se muestran como “Sin datos”, sin calcular su desvío.</p>`:'';
+  const rowsH=cats.map(c=>{const sg=isIn(c)?1:-1,hasCategoryData=isIn(c)?hasCollections:hasPayments;const pp=sum(P,c)*sg,ej=sum(E,c)*sg,pr=proj[c]||0;const real=hasE?(hasCategoryData?ej:null):pr;const dv=real===null?null:real-pp;const pct=dv!==null&&pp?dv/Math.abs(pp):null;
     const good=dv>=0;const w=pct==null?0:Math.min(60,Math.abs(pct)*100);
-    return `<tr><td class="cat">${c}${P.some(r=>r.cat===c&&r.ej)?' <span class="chip ej">Ejemplo</span>':''}</td><td>${tM(pp)}</td><td>${tM(pr)}</td>${hasE?`<td>${tM(ej)}</td>`:''}<td class="${good?'pos':'neg'}">${tM(dv)}</td><td style="text-align:left"><span class="dev" style="width:${w}px;background:${good?'var(--good)':'var(--crit)'}"></span> <span class="note">${pct==null?'s/ppto':(pct>0?'+':'')+nf1.format(pct*100)+' %'}</span></td></tr>`}).join('');
+    return `<tr><td class="cat">${c}${P.some(r=>r.cat===c&&r.ej)?' <span class="chip ej">Ejemplo</span>':''}</td><td>${tM(pp)}</td><td>${tM(pr)}</td>${hasE?`<td>${hasCategoryData?tM(ej):'Sin datos'}</td>`:''}<td class="${dv===null?'':good?'pos':'neg'}">${dv===null?'–':tM(dv)}</td><td style="text-align:left"><span class="dev" style="width:${w}px;background:${good?'var(--good)':'var(--crit)'}"></span> <span class="note">${dv===null?'sin ejecutado':pct==null?'s/ppto':(pct>0?'+':'')+nf1.format(pct*100)+' %'}</span></td></tr>`}).join('');
   v.innerHTML=`<div class="toolbar"><div><div class="h2">Presupuesto vs ${hasE?'ejecutado':'proyectado'}</div><div class="note">Millones de pesos · desvío positivo = más cobro o menos pago que lo presupuestado${hasE?'':' · sin ejecutado cargado para el mes, se compara con lo proyectado'}</div></div>
    <div class="fld"><label for="pptM">Mes</label><select id="pptM">${months.map(k=>`<option value="${k}"${k===m?' selected':''}>${MES[+k.slice(5)-1]} ${k.slice(0,4)}</option>`).join('')}</select></div></div>
-   <div class="tblwrap"><table><thead><tr><th>Categoría</th><th>Presupuesto</th><th>Proyectado (ERP)</th>${hasE?'<th>Ejecutado</th>':''}<th>Desvío</th><th style="text-align:left">Desvío %</th></tr></thead><tbody>${rowsH}</tbody></table></div>
+   ${partial}<div class="tblwrap"><table><thead><tr><th>Categoría</th><th>Presupuesto</th><th>Proyectado (ERP)</th>${hasE?'<th>Ejecutado</th>':''}<th>Desvío</th><th style="text-align:left">Desvío %</th></tr></thead><tbody>${rowsH}</tbody></table></div>
    <p class="note">“Proyectado” toma los vencimientos del mes según Finnegans, más los atrasados imputados al mes de corte. Cuando el DW esté conectado, “Ejecutado” saldrá de los movimientos de tesorería reales.</p>`;
   $('#pptM').onchange=e=>{S.pptM=e.target.value;save();renderPpt()}}
 
@@ -878,7 +888,7 @@ async function freshFinnegansToken(){
 function renderDat(){
   const v=$('#v-dat');
   v.innerHTML=apiSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
-    const tot=['PPTO','EJE'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
+    const tot=['PPTO','EJC','EJP'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
     ${d.filters?`<div class="note">Filtros de la carga: ${esc(Object.entries(d.filters).filter(([key,value])=>key!=='fecha'&&value).map(([key,value])=>((REPORT_FIELDS[k]||[]).find(([f])=>f===key)||[key,key])[1]+': '+value).join(' · ')||'sin filtros adicionales')}</div>`:''}
@@ -894,7 +904,7 @@ function renderDat(){
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>
-  <li><b>Ejecutado y saldos bancarios</b>: movimientos de tesorería y saldo de cada cuenta al cierre del día anterior.</li></ul>
+  <li><b>Cobros ejecutados, pagos ejecutados y saldos bancarios</b>: movimientos reales de tesorería por tipo y saldo de cada cuenta al cierre del día anterior.</li></ul>
   <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   if($('#finnegansForm')){
@@ -941,7 +951,7 @@ function renderDat(){
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});
   v.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=SRC[b.dataset.copy].tpl.join('\t');const m=$('#msg-'+b.dataset.copy);
     navigator.clipboard.writeText(t).then(()=>{m.className='msg ok';m.textContent='Encabezados copiados. Pegalos en la fila 1 de una hoja de Excel.'},()=>{m.className='msg';m.textContent=t})});
-  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=freshData();S.ovr={};S.inc={};save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
+  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=freshData();delete S.legacyExecuted;S.ovr={};S.inc={};save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
 
 /* ---------- carga de Excel ---------- */
 const nk=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -973,15 +983,22 @@ function parse(k,R){const o=[];const ref=S.ref;
   if(k==='PRE')for(const r of R)o.push({s:'PRE',f:toISO(r['fecha vto']),m:-(Math.abs(num(r.capital))+Math.abs(num(r.interes))),c:isUSD(r.moneda)?'USD':'ARS',p:r.entidad,doc:'Préstamo '+(r.prestamo??''),cat:'Préstamos',x:'Capital '+nf0.format(num(r.capital))+' + interés '+nf0.format(num(r.interes))});
   if(k==='LEA')for(const r of R)o.push({s:'LEA',f:toISO(r['fecha vto']),m:-Math.abs(num(r.cuota)),c:isUSD(r.moneda)?'USD':'ARS',p:r.entidad,doc:'Contrato '+(r.contrato??''),cat:'Leasing'});
   if(k==='ARCA')for(const r of R)o.push({s:'ARCA',f:toISO(r['fecha vto']),m:-Math.abs(num(r.importe)),c:'ARS',p:'ARCA · '+(r.plan??''),doc:'Cuota '+(r.cuota??''),cat:'Plan de pagos ARCA'});
-  if(k==='PPTO'||k==='EJE')for(const r of R){const c=catOf(r.categoria),mes=toMes(r.mes);if(!c||!mes)continue;o.push({mes,cat:c,imp:Math.abs(num(r.importe))})}
+  if(k==='PPTO'||k==='EJC'||k==='EJP')for(const [i,r]of R.entries()){
+    const c=catOf(r.categoria),mes=toMes(r.mes);
+    if(k!=='PPTO'){
+      if(!c||!mes)throw new Error(`Fila ${i+1}: mes o categoría no válidos.`);
+      if(!(k==='EJC'?CATS_IN:CATS_OUT).includes(c))throw new Error(`Fila ${i+1}: la categoría «${c}» corresponde a ${k==='EJC'?'Pagos ejecutados':'Cobros ejecutados'}. Cargala en esa fuente.`);
+    }
+    if(!c||!mes)continue;o.push({mes,cat:c,imp:Math.abs(num(r.importe))});
+  }
   return o.filter(r=>r.f!==null)}
 function loadExample(k){const ref=S.ref,o=[];const mAdd=(s,n,day)=>{const d=D(s);const x=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+n,day));return iso(x)};
   if(k==='PRE'){for(let i=1;i<=12;i++){o.push({s:'PRE',f:mAdd(ref,i,15),m:-(41666667+Math.round(52e6*(1-(i-1)/24)*0.035)),c:'ARS',p:'Banco Ejemplo A',doc:'Préstamo inversión · cuota '+i,cat:'Préstamos',ej:1});
       o.push({s:'PRE',f:mAdd(ref,i,5),m:-27500,c:'USD',p:'Banco Ejemplo B',doc:'Préstamo equipos USD · cuota '+i,cat:'Préstamos',ej:1})}}
   if(k==='LEA')for(let i=1;i<=12;i++)o.push({s:'LEA',f:mAdd(ref,i,10),m:-9800000,c:'ARS',p:'Leasing Ejemplo',doc:'Contrato 1234 · cuota '+i,cat:'Leasing',ej:1});
   if(k==='ARCA')for(let i=1;i<=12;i++){o.push({s:'ARCA',f:mAdd(ref,i-(+ref.slice(8)>16?0:1),16),m:-6400000,c:'ARS',p:'ARCA · Plan IVA (ejemplo)',doc:'Cuota '+i+'/12',cat:'Plan de pagos ARCA',ej:1})}
-  if(k==='PPTO'||k==='EJE'){const base={'Cobranza clientes':9.5e9,'Cheques en cartera':6e8,'Proveedores':5.2e9,'Cheques emitidos':2.4e9,'Préstamos':1.8e8,'Leasing':1.1e8,'Plan de pagos ARCA':6.4e7,'Fondo fijo':4e7,'Retiros de socios':3e7};
-    for(let i=-1;i<=2;i++){const mes=mAdd(ref,i,1).slice(0,7);if(k==='EJE'&&i>=0)continue;let j=0;for(const[c,v]of Object.entries(base)){j++;const f=k==='EJE'?(1+((j*37%17)-8)/100):1+i*0.03;o.push({mes,cat:c,imp:Math.round(v*f),ej:1})}}}
+  if(k==='PPTO'||k==='EJC'||k==='EJP'){const base={'Cobranza clientes':9.5e9,'Cheques en cartera':6e8,'Proveedores':5.2e9,'Cheques emitidos':2.4e9,'Préstamos':1.8e8,'Leasing':1.1e8,'Plan de pagos ARCA':6.4e7,'Fondo fijo':4e7,'Retiros de socios':3e7};
+    for(let i=-1;i<=2;i++){const mes=mAdd(ref,i,1).slice(0,7);if(k!=='PPTO'&&i>=0)continue;let j=0;for(const[c,v]of Object.entries(base)){j++;if(k==='EJC'&&!isIn(c)||k==='EJP'&&isIn(c))continue;const f=k!=='PPTO'?(1+((j*37%17)-8)/100):1+i*0.03;o.push({mes,cat:c,imp:Math.round(v*f),ej:1})}}}
   clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:todayISO};save()}
 
 /* ---------- shell ---------- */

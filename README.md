@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.6**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.7**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -13,6 +13,14 @@ La app es un único archivo HTML, sin servidor: se abre en cualquier navegador.
 - **Vencimientos**: calendario mensual y agenda de 14 días.
 - **Presupuesto vs real**: comparación mensual por categoría.
 - **Datos y fuentes**: carga de los Excel de Finnegans y de las plantillas.
+
+## Cobros y pagos ejecutados
+
+La fuente anterior **Ejecutado** se divide en **Cobros ejecutados** y **Pagos ejecutados**, con cargas, ejemplos y botones Quitar independientes. Ambas usan las columnas `Mes`, `Categoría`, `Importe`: cobros admite categorías de ingreso y pagos categorías de egreso. Los importes se normalizan como magnitudes positivas; la comparación aplica el signo según la categoría. Una categoría del tipo contrario rechaza la carga y conserva los datos anteriores.
+
+Al abrir esta versión, los datos de Ejecutado ya guardados se separan automáticamente por categoría, conservando mes, importes y procedencia. La carga original se mantiene como respaldo de migración en el navegador. **Presupuesto vs real** combina ambas fuentes; si para un mes solo hay cobros o solo pagos cargados, indica **Ejecutado parcial** y muestra **Sin datos** en el tipo faltante, sin calcularle un desvío ficticio contra cero.
+
+Las APIs de estas dos nuevas fuentes todavía no están configuradas, por lo que **Actualizar APIs** continúa consultando Clientes, Proveedores y Cheques, sin modificar los ejecutados cargados por Excel.
 
 ## Estructura
 
