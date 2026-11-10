@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.7**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.8**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -11,6 +11,7 @@ La app es un único archivo HTML, sin servidor: se abre en cualquier navegador.
 - **Resumen**: saldo, cobros y pagos a 30 días, atrasado neto, saldo mínimo proyectado, gráfico de ingresos, egresos y saldo, alertas de vencimientos e indicadores de capital de trabajo (capital de trabajo neto, brecha financiera, liquidez corriente e inmediata, DSO, DPO, brecha de plazos y solvencia).
 - **Flujo de fondos**: por día, semana, mes o año. Cada fila se despliega por organización y por documento. Permite excluir organizaciones, reprogramar la fecha de cualquier ítem y marcar cobros como incobrables.
 - **Vencimientos**: calendario mensual y agenda de 14 días.
+- **Ejecutado**: resultados de cobros y pagos realizados, totales, neto, cobertura, evolución mensual, análisis por categoría y registros de los reportes.
 - **Presupuesto vs real**: comparación mensual por categoría.
 - **Datos y fuentes**: carga de los Excel de Finnegans y de las plantillas.
 
@@ -21,6 +22,14 @@ La fuente anterior **Ejecutado** se divide en **Cobros ejecutados** y **Pagos ej
 Al abrir esta versión, los datos de Ejecutado ya guardados se separan automáticamente por categoría, conservando mes, importes y procedencia. La carga original se mantiene como respaldo de migración en el navegador. **Presupuesto vs real** combina ambas fuentes; si para un mes solo hay cobros o solo pagos cargados, indica **Ejecutado parcial** y muestra **Sin datos** en el tipo faltante, sin calcularle un desvío ficticio contra cero.
 
 Las APIs de estas dos nuevas fuentes todavía no están configuradas, por lo que **Actualizar APIs** continúa consultando Clientes, Proveedores y Cheques, sin modificar los ejecutados cargados por Excel.
+
+### Resultados y análisis
+
+La solapa **Ejecutado** presenta las dos fuentes juntas y funciona sin cargar un presupuesto. También se accede desde **Ver resultados** en las pastillas de cobros y pagos. Permite elegir un mes o todos los meses cargados y conserva la selección al recargar.
+
+Muestra cobros, pagos, neto y cobertura de pagos (cobros / pagos del mismo período), evolución mensual, desglose y participación por categoría, procedencia de las cargas y detalle de los registros originales de las plantillas. El análisis identifica la categoría de mayor importe y el cambio del neto entre meses consecutivos completos. Los pagos se muestran con signo negativo; el neto es cobros menos pagos.
+
+Si falta una de las dos fuentes en algún mes seleccionado, informa que los datos son parciales y no calcula un neto o cobertura que mezcle períodos distintos. Los importes cargados siguen visibles por tipo y por mes. La carga continúa en **Datos y fuentes**; **Presupuesto vs real** conserva su comparación independiente.
 
 ## Estructura
 
