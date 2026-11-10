@@ -15,7 +15,7 @@ test('supplier URL supports dimension, value and case-sensitive document paramet
  assert.equal(u.pathname,'/api/reports/composicionSaldoProveedor');assert.equal(u.searchParams.get('PARAMWEBREPORT_dimension'),'Centro');assert.equal(u.searchParams.get('PARAMWEBREPORT_valor'),'Valor 1');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoDocumento'),'FC');
 });
 test('rejects unknown source, invalid date and non-string filters',()=>{
- assert.throws(()=>reportUrl('CHP',{fecha:'2026-10-15'},'token'));
+ assert.throws(()=>reportUrl('CHT',{fecha:'2026-10-15'},'token'));
  assert.throws(()=>reportUrl('CLI',{fecha:'2026-02-31'},'token'));
  assert.throws(()=>reportUrl('CLI',{fecha:'2026-10-15',empresa:{}},'token'));
 });
@@ -100,7 +100,7 @@ test('proxy rejects unsafe or incomplete requests before contacting provider',as
  assert.equal((await invoke(req({method:'GET'}))).statusCode,405);
  assert.equal((await invoke(req({headers:{host:'cashflow.example',origin:'https://other.example'}}))).statusCode,403);
  assert.equal((await invoke(req({body:{source:'CLI',filters:{fecha:'2026-10-15'}}}))).statusCode,400);
- assert.equal((await invoke(req({body:{source:'CHP',access_token:'token',filters:{fecha:'2026-10-15'}}}))).statusCode,400);
+ assert.equal((await invoke(req({body:{source:'CHT',access_token:'token',filters:{fecha:'2026-10-15'}}}))).statusCode,400);
 });
 test('provider failures are mapped and tokens remain redacted in diagnostics',async()=>{
  for(const [up,status]of [[401,401],[403,401],[400,400],[404,502],[500,502],[429,429]]){

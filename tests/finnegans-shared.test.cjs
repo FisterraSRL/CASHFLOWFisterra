@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const configHandler=require('../api/finnegans-config.js'),reportHandler=require('../api/finnegans-report.js');
 const {sharedConfig}=require('../lib/finnegans-shared.cjs');
-const vars={FINNEGANS_CLIENT_ID:'shared-id',FINNEGANS_CLIENT_SECRET:'shared-secret',FINNEGANS_CLI_FILTERS:JSON.stringify({empresa:'E1',cuenta:'DxVta',moneda:'PES',unknown:'ignored'}),FINNEGANS_PRV_FILTERS:JSON.stringify({empresa:'E1',cuenta:'PRV',moneda:'PES'})};
+const vars={FINNEGANS_CLIENT_ID:'shared-id',FINNEGANS_CLIENT_SECRET:'shared-secret',FINNEGANS_CLI_FILTERS:JSON.stringify({empresa:'E1',cuenta:'DxVta',moneda:'PES',unknown:'ignored'}),FINNEGANS_PRV_FILTERS:JSON.stringify({empresa:'E1',cuenta:'PRV',moneda:'PES'}),FINNEGANS_CHP_FILTERS:JSON.stringify({empresa:'E1',cuenta:'BANCO',mostrarSoloNoConciliados:'true'})};
 async function configured(run,changes={}){
  const before=Object.fromEntries(Object.keys(vars).map(k=>[k,process.env[k]])),oldFetch=global.fetch;
  Object.assign(process.env,vars,changes);
@@ -48,9 +48,18 @@ test('shared authentication failures preserve provider secrecy and never fetch a
  let n=0;global.fetch=async()=>{n++;return new Response('shared-secret private provider error',{status:401})};
  const r=await invoke(reportHandler,{shared:true,source:'CLI'});assert.equal(r.statusCode,401);assert.equal(n,1);assert.ok(!JSON.stringify(r.body).includes('shared-secret'));
 }));
+test('shared own cheque requests keep fixed type, scope and a server-side token',()=>configured(async()=>{
+ global.fetch=async(url)=>{
+  const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.token');
+  assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'1');
+  assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'BANCO');assert.equal(u.searchParams.get('PARAMWEBREPORT_MostrarSoloNoConciliados'),'true');
+  return new Response(JSON.stringify([{RAZONSOCIAL:'Tercero',NUMERO:1,FECHAVTO:'20-11-2026',IMPMONEDATRANS:100,ESTADO:'Emitido'}]));
+ };
+ const r=await invoke(reportHandler,{source:'CHP',shared:true,filters:{empresa:'OTHER',tipoCheque:'2'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].m,-100);assert.ok(!JSON.stringify(r.body).includes('server.token'));
+}));
 test('disabled sources and invalid origins do not reach Finnegans',()=>configured(async()=>{
  global.fetch=async()=>{throw new Error('Unexpected network')};
- assert.equal((await invoke(reportHandler,{shared:true,source:'CHP'})).statusCode,503);
+ assert.equal((await invoke(reportHandler,{shared:true,source:'CHT'})).statusCode,503);
  assert.equal((await invoke(reportHandler,{shared:true,source:'constructor'})).statusCode,503);
  assert.equal((await invoke(configHandler,{},'POST',{origin:'https://other.example'})).statusCode,403);
 }));

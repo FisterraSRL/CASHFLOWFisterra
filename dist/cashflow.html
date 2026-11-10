@@ -281,7 +281,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.1">v1.0.1</span>
+    <span class="app-version" aria-label="Versión 1.0.2">v1.0.2</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -749,9 +749,9 @@ async function restoreSharedConnection(){
     if(!response.ok)return;const config=await response.json();
     if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
     SHARED.enabled=true;SHARED.sources=config.sources;
-    for(const k of ['CLI','PRV'])if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
+    for(const k of ['CLI','PRV','CHP'])if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
     renderAll();
-    await Promise.all(['CLI','PRV'].filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
+    await Promise.all(['CLI','PRV','CHP'].filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
   }catch{/* Local mode remains available if shared configuration cannot be reached. */}
 }
 async function testSharedConnection(){
@@ -794,7 +794,7 @@ async function restoreCredentials(){
     }
   }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
 }
-const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']]};
+const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
 const REPORT_FILTER_KEY=LS+'-report-filters';
 function reportToday(){
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en',{timeZone:'America/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
@@ -829,9 +829,17 @@ function reportDiagnosticsHTML(k){
 }
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
-  if(SHARED.enabled)return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p></details>`;
-  const r=REPORT_STATE[k],fields=[['fecha','Fecha del reporte'],...REPORT_FIELDS[k]];
-  return `<details class="report-options"><summary>Parámetros de composición de saldos</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label><input id="report-${k}-${key}" data-report="${k}" data-filter="${key}" type="${key==='fecha'?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}${r.busy?' disabled':''}></div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha siempre es hoy (hora de Argentina) y se actualiza automáticamente. Los filtros vacíos se omiten.</p></details>`;
+  const title=k==='CHP'?'Parámetros de cheques propios':'Parámetros de composición de saldos';
+  const chequeNote=k==='CHP'?'<p class="note">Tipo de cheque: propios (TipoCheque = 1). Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Seleccioná el estado que querés proyectar: la consulta puede incluir cheques ya conciliados si elegís “No”.</p>':'';
+  if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p>${chequeNote}</details>`;
+  const r=REPORT_STATE[k],fields=[['fecha',k==='CHP'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
+  const control=(key)=>{
+    const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy?' disabled':''}`;
+    if(key==='mostrarSoloNoConciliados')return `<select ${attrs}><option value="false"${r.filters[key]!=='true'?' selected':''}>No</option><option value="true"${r.filters[key]==='true'?' selected':''}>Sí</option></select>`;
+    const dateField=key==='fecha'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
+    return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
+  };
+  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}</details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return;
@@ -844,7 +852,7 @@ async function obtainReport(k){
   try{
     const token=shared?null:await freshFinnegansToken();
     filters.fecha=reportToday();
-    state.message='Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
+    state.message=k==='CHP'?'Consultando situación de cheques propios en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
     const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
     const data=await response.json().catch(()=>null);
     if(data?.diagnostics)state.diagnostics=data.diagnostics;
@@ -853,7 +861,7 @@ async function obtainReport(k){
       throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
     }
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
-    if(!data.rows.length){state.message='La consulta no devolvió saldos pendientes. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return}
+    if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
     clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
@@ -921,8 +929,8 @@ function renderDat(){
     <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
     <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
-  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes y proveedores: API disponible · otras fuentes: Excel o integración pendiente</p>
-  <div class="prose"><p>Las APIs de composición de saldos ya pueden consultarse desde Clientes y Proveedores. El resto de las integraciones se incorporará por fuente:</p>
+  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores y cheques propios: API disponible · otras fuentes: Excel o integración pendiente</p>
+  <div class="prose"><p>Clientes y Proveedores consultan composición de saldos; Cheques propios consulta situación de cheques (TipoCheque = 1). El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>
