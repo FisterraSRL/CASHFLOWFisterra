@@ -21,7 +21,7 @@ test('own cheque optional dates are omitted, reconciliation false is explicit an
 });
 test('issued cheques are expenses with their original due date, number, bank and state',()=>{
  const out=normalizeReport('CHP',{data:[cheque() ]},'2026-11-10'),r=out.rows[0];
- assert.equal(r.s,'CHP');assert.equal(r.cat,'Cheques emitidos');assert.equal(r.m,-125000);assert.equal(r.c,'ARS');assert.equal(r.f,'2026-11-20');assert.equal(r.fc,'2026-11-01');assert.equal(r.p,'Proveedor de prueba');assert.equal(r.doc,'Ch 00123 · OP - 10');assert.equal(r.x,'Banco Galicia');assert.equal(r.e,'Emitido');assert.match(r.id,/^CHP-/);
+ assert.equal(r.s,'CHP');assert.equal(r.cat,'Cheques emitidos');assert.equal(r.m,-125000);assert.equal(r.c,'ARS');assert.equal(r.f,'2026-11-20');assert.equal(r.fc,'2026-11-01');assert.equal(r.p,'Proveedor de prueba');assert.equal(r.doc,'Ch 00123 · OP - 10');assert.equal(r.chequeNumber,'00123');assert.equal(r.x,'Banco Galicia');assert.equal(r.e,'Emitido');assert.match(r.id,/^CHP-/);
  assert.equal(normalizeReport('CHP',[cheque({IMPMONEDATRANS:-125000})],'2026-11-10').rows[0].m,-125000);
 });
 test('own cheques support Excel aliases and USD without inferring due dates from status',()=>{
@@ -58,7 +58,7 @@ test('third party cheque URL fixes type 1 independently of own cheque filters',(
 test('third party cheques are positive receipts preserving account, bank, state and reconciliation',()=>{
  const f={TERCERO:'Cliente de prueba',NUMERO:'345',DOCUMENTO:'REC-1',FECHAEMISION:'01-11-2026',FECHAVENCIMIENTO:'20-11-2026',IMPORTEMONTRANSACCION:1000,MONEDA:'Pesos',ESTADO:'En Cartera',CONCILIADO:'No',CUENTA:'Valores A Depositar',BANCO:'Banco de prueba'};
  const r=normalizeReport('CHT',[f],'2026-11-10').rows[0];
- assert.equal(r.s,'CHT');assert.match(r.id,/^CHT-/);assert.equal(r.m,1000);assert.equal(r.cat,'Cheques en cartera');assert.equal(r.f,'2026-11-20');assert.equal(r.x,'Valores A Depositar');assert.equal(r.bank,'Banco de prueba');assert.equal(r.conciliado,false);
+ assert.equal(r.s,'CHT');assert.match(r.id,/^CHT-/);assert.equal(r.m,1000);assert.equal(r.cat,'Cheques en cartera');assert.equal(r.chequeNumber,'345');assert.equal(r.f,'2026-11-20');assert.equal(r.x,'Valores A Depositar');assert.equal(r.bank,'Banco de prueba');assert.equal(r.conciliado,false);
  const deposited=normalizeReport('CHT',[{...f,ESTADO:'Cheque Depositado'}],'2026-11-10').rows[0];assert.equal(deposited.cat,'Cheques depositados');assert.equal(deposited.e,'Cheque Depositado');
  const settled=normalizeReport('CHT',[{...f,CONCILIADO:'Si'}],'2026-11-10').rows[0];assert.equal(settled.conciliado,true);
  const usd=normalizeReport('CHT',[{...f,MONEDA:'USD',IMPORTEMONTRANSACCION:-25}],'2026-11-10').rows[0];assert.equal(usd.c,'USD');assert.equal(usd.m,25);
