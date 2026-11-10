@@ -23,6 +23,14 @@ test('normalizes official field names, USD original amount, snapshot, and compan
  const out=normalizeReport('CLI',{data:{rows:[fixture()]}},'2026-10-15');const r=out.rows[0];
  assert.equal(r.m,100);assert.equal(r.c,'USD');assert.equal(r.f,'2026-10-01');assert.equal(r.company,'Empresa de prueba');assert.match(r.id,/^CLI-/);assert.equal(out.warnings.length,0);
 });
+test('keeps Comprobante as the displayed invoice number without changing Documento identity',()=>{
+ for(const source of ['CLI','PRV']){
+  const raw=fixture({DOCUMENTO:'FCV-07 - 315',COMPROBANTE:'F-0010-00001952',PROVEEDOR:'Proveedor de prueba',CUENTA:'PROVEEDORES'});
+  const r=normalizeReport(source,[raw],'2026-10-15').rows[0];
+  const previous=normalizeReport(source,[{...raw,COMPROBANTE:undefined}],'2026-10-15').rows[0];
+  assert.equal(r.doc,'FCV-07 - 315');assert.equal(r.comprobante,'F-0010-00001952');assert.equal(r.id,previous.id);
+ }
+});
 test('preserves original MXN, CLP and EUR amounts for explicit conversion',()=>{
  for(const [currency,amount] of [['MXN',226775.71],['Pesos chilenos',3623063.62],['EUR',1650]]){
   const r=normalizeReport('CLI',[fixture({MONEDA:currency,IMPORTEMONTRAN:amount,IMPORTEMONPPAL:amount*20})],'2026-10-15').rows[0];

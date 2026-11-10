@@ -315,7 +315,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.18">v1.0.18</span>
+    <span class="app-version" aria-label="Versión 1.0.19">v1.0.19</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -684,7 +684,7 @@ function drawChart(F){
 /* ---------- FLUJO ---------- */
 const FLOW_SELECTED=new Set();
 function flowDocNumber(r){
-  if(r.s!=='CHP'&&r.s!=='CHT')return r.doc||'Comprobante sin número';
+  if(r.s!=='CHP'&&r.s!=='CHT')return r.comprobante||r.doc||'Comprobante sin número';
   const number=String(r.chequeNumber||'').trim()||(String(r.doc||'').match(/^Ch\s+([^·]+)/i)||[])[1]?.trim();
   return number?'Ch '+number:r.doc||'Cheque sin número';
 }
@@ -693,6 +693,7 @@ function orgTree(){const T={};for(const r of allMovs()){if(!S.incChq&&chpPend(r)
 function renderFlu(){
   const sx=($('#v-flu .tblwrap')||{}).scrollLeft||0;
   const F=buildFlow(),v=$('#v-flu'),T=orgTree(),ex=new Set(S.excl||[]);S.exp=S.exp||{};S.more=S.more||{};S.expO=S.expO||{};
+  const missingComprobante=allMovs().some(r=>(r.s==='CLI'||r.s==='PRV')&&!r.comprobante);
   const available=new Set(allMovs().filter(r=>S.incChq||!chpPend(r)).map(r=>r.id));for(const id of FLOW_SELECTED)if(!available.has(id))FLOW_SELECTED.delete(id);
   const selectedRows=()=>allMovs().filter(r=>FLOW_SELECTED.has(r.id));
   const q=nk(S.fq||''),view=S.view||'res';
@@ -730,6 +731,7 @@ function renderFlu(){
    <div class="ftools"><div class="fld"><label>Vista</label><div class="seg" id="fV"><button data-v="res" aria-pressed="${view==='res'}">Resumida</button><button data-v="org" aria-pressed="${view==='org'}">Por organización</button></div></div>
    <div class="fld"><label for="fQ">Buscar organización</label><input id="fQ" type="search" value="${esc(S.fq||'')}" placeholder="Cliente, proveedor, banco" style="width:220px"></div>
    ${ex.size?`<div class="fld"><label>Excluidas</label><button class="btn" id="fAll">Incluir las ${ex.size}</button></div>`:''}</div></div>
+  ${missingComprobante?'<p class="note" role="status">Algunas cargas anteriores no incluyen el campo Comprobante. Actualizá Clientes y Proveedores en Datos y fuentes para mostrarlo.</p>':''}
   <div class="flow-bulk" role="group" aria-label="Acciones sobre comprobantes seleccionados"><span id="flowSelectedCount" aria-live="polite"></span><button type="button" class="btn" id="flowMarkInc">Marcar como incobrables</button><button type="button" class="btn" id="flowUnmarkInc">Quitar incobrable</button><button type="button" class="btn" id="flowClearSelection">Limpiar selección</button><span class="note">Incobrable se aplica solo a cobros.</span></div>
   <div class="tblwrap"><table><thead><tr><th>Concepto</th>${F.cols.map(c=>`<th class="${atr(c).trim()}">${hdr(c)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
   ${line('Saldo inicial',c=>F.M[c].ini,'tot',null)}
@@ -1323,10 +1325,10 @@ function handleFile(k,file){const msg=$('#msg-'+k);if(!file)return;msg.className
   }catch(err){const current=$('#msg-'+k)||msg;current.className='msg err';current.textContent='No se pudo cargar: '+err.message}};rd.readAsArrayBuffer(file)}
 function parse(k,R){const o=[];const ref=S.ref;
   if(k==='CLI')for(const r of R){const mora=num(r['dias de mora']);const fc=toISO(r['fecha comprobante']);if(!fc)continue;const dd=(String(r.condicionpago||'').match(/\d+/)||[30])[0];
-    o.push({s:'CLI',fc,f:mora>0?addD(ref,-mora):addD(fc,+dd),m:num(r['importe ppal']),c:'ARS',p:r.cliente,doc:r.documento,cat:'Cobranza clientes',x:r.condicionpago||'',e:mora>0?'Vencido':'A vencer'})}
+    o.push({s:'CLI',fc,f:mora>0?addD(ref,-mora):addD(fc,+dd),m:num(r['importe ppal']),c:'ARS',p:r.cliente,doc:r.documento,comprobante:r.comprobante||r.documento,cat:'Cobranza clientes',x:r.condicionpago||'',e:mora>0?'Vencido':'A vencer'})}
   if(k==='PRV'){const cm={'proveedores':'Proveedores','leasing':'Leasing','fondo fijo':'Fondo fijo'};
     for(const r of R){const parsed=excelCurrency(r.moneda);if(!parsed)throw new Error('Moneda no reconocida: '+r.moneda);const original=num(r['importe tran']),residual=parsed==='USD'&&!original,c=residual?'ARS':parsed,m=c==='ARS'?num(r['importe ppal']):original;if(!m)continue;
-      const cu=nk(r.cuenta||'');const fa=toISO(r['fecha de vencimiento actual']),fv=toISO(r['fecha vto']);o.push({s:'PRV',fc:toISO(r['fecha comprobante']),f:(fa&&fa>=ref)?fa:(fv||fa),m,c,p:r.proveedor,doc:r.documento,cat:cm[cu]||(cu.includes('socio')?'Retiros de socios':cu.includes('leasing')?'Leasing':cu?'Otras deudas':'Proveedores'),x:r.condicionpago||'',e:r.venc||''})}}
+      const cu=nk(r.cuenta||'');const fa=toISO(r['fecha de vencimiento actual']),fv=toISO(r['fecha vto']);o.push({s:'PRV',fc:toISO(r['fecha comprobante']),f:(fa&&fa>=ref)?fa:(fv||fa),m,c,p:r.proveedor,doc:r.documento,comprobante:r.comprobante||r.documento,cat:cm[cu]||(cu.includes('socio')?'Retiros de socios':cu.includes('leasing')?'Leasing':cu?'Otras deudas':'Proveedores'),x:r.condicionpago||'',e:r.venc||''})}}
   if(k==='CHP')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'CHP',f:toISO(r['fecha de vto']),m:-Math.abs(num(r['imp moneda trans'])),c,p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.documento||''),chequeNumber:String(r.numero??''),cat:'Cheques emitidos',x:/galicia/i.test(r.cuenta)?'Galicia':/icbc/i.test(r.cuenta)?'ICBC':(r.banco||''),e:r.estado})}
   if(k==='CHT')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'CHT',f:toISO(r['fecha de vto']),m:num(r['imp moneda trans']),c,p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.banco||''),chequeNumber:String(r.numero??''),cat:'Cheques en cartera',x:String(r.cuenta||'').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),e:r.estado})}
   if(k==='PRE')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'PRE',f:toISO(r['fecha vto']),m:-(Math.abs(num(r.capital))+Math.abs(num(r.interes))),c,p:r.entidad,doc:'Préstamo '+(r.prestamo??''),cat:'Préstamos',x:'Capital '+nf0.format(num(r.capital))+' + interés '+nf0.format(num(r.interes))})}
