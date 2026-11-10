@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.14**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.15**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -39,6 +39,7 @@ Si falta una de las dos fuentes en algún mes seleccionado o sus fechas consulta
 app/cashflow.src.html     Plantilla de la app (HTML + CSS + JS). Lleva el marcador /*DATA*/
 scripts/normalize.py      Convierte los Excel de Finnegans en el JSON de movimientos
 scripts/build.py          Inyecta el JSON en la plantilla y genera la app
+scripts/build-deployment.cjs Genera cada instalación de Vercel desde el mismo código
 data/sample/data.json     Datos de demostración con clientes y proveedores anonimizados
 dist/cashflow.html        App lista para abrir, con los datos de demostración
 docs/                     Presentación comercial
@@ -65,11 +66,13 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 
 - Carpeta raíz del proyecto: la raíz del repositorio.
 - Carpeta publicada: `dist`.
-- Vercel instala la dependencia PostgreSQL declarada en `package.json`; el HTML generado ya está versionado.
+- Vercel instala la dependencia PostgreSQL declarada en `package.json` y genera el HTML para cada instalación durante el despliegue.
 - La ruta `/` sirve `dist/cashflow.html`.
 - Vercel también publica la función Node.js `api/finnegans-token.js` para autenticar con Finnegans.
 
-Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. Después de editar la plantilla, regenerar `dist/cashflow.html` con `scripts/build.py` antes de subirla.
+Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. El proyecto de Fisterra conserva la versión de ejemplo. Para una instalación nueva, crear otro proyecto de Vercel conectado al mismo repositorio y definir `CASHFLOW_INSTALLATION_NAME` con el nombre del cliente. El proceso de compilación genera esa publicación con la etiqueta del cliente y sin movimientos, saldos ni tipo de cambio de Fisterra. Cada proyecto debe tener su propia base PostgreSQL y `CASHFLOW_ACCESS_KEY`. Hasta completar ambas, las APIs de esa instalación responden con error y no exponen datos. Las credenciales y filtros de Finnegans se cargan después desde **Datos y fuentes**; los reportes son los mismos para todas las instalaciones.
+
+Para regenerar el HTML local de Fisterra: `node scripts/build-deployment.cjs`. Para verificar una instalación nueva sin alterar ese archivo: definir `CASHFLOW_INSTALLATION_NAME=Nubiral` y ejecutar `node scripts/build-deployment.cjs tmp/nubiral.html`.
 
 ### Persistencia compartida por instalación
 

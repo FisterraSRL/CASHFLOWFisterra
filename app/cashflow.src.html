@@ -248,7 +248,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.14">v1.0.14</span>
+    <span class="app-version" aria-label="Versión 1.0.15">v1.0.15</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -263,7 +263,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <div class="params" role="region" aria-label="Parámetros">
   <div class="fld"><label for="pRef">Fecha de corte</label><input type="date" id="pRef"></div>
   <div class="fld"><label for="pSaldo">Saldo bancos hoy ($)</label><input class="num" id="pSaldo" inputmode="decimal" placeholder="Ingresar saldo"></div>
-  <div class="fld"><label for="pTc">TC USD ($)</label><input class="num" id="pTc" inputmode="decimal" style="width:100px"></div>
+  <div class="fld"><label for="pTc">TC USD ($)</label><input class="num" id="pTc" inputmode="decimal" placeholder="Ingresar TC" style="width:100px"></div>
   <div class="fld"><label for="pHor">Horizonte</label>
     <select id="pHor"><option value="30">30 días</option><option value="90">90 días</option><option value="180">6 meses</option><option value="365">12 meses</option></select></div>
   <div class="fld"><label>Agrupar por</label>
@@ -310,11 +310,11 @@ const SRC={
 const LS='cf-ghn-v1';
 const todayISO=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
 let S={ref:RAW.ref>todayISO?RAW.ref:todayISO,tc:RAW.tc,saldo:0,hor:90,gran:'S',incChq:false,tab:'res',calM:null,calF:'all',pptM:null,data:null};
-function freshData(){return{
-  CLI:{rows:RAW.mov.filter(r=>r.s==='CLI'),orig:'Finnegans · Excel',at:RAW.ref},
-  PRV:{rows:RAW.mov.filter(r=>r.s==='PRV'),orig:'Finnegans · Excel',at:RAW.ref},
-  CHP:{rows:RAW.mov.filter(r=>r.s==='CHP'),orig:'Finnegans · Excel',at:RAW.ref},
-  CHT:{rows:RAW.cartera,orig:'Finnegans · Excel',at:RAW.ref},
+function freshData(){const at=RAW.mov.length||RAW.cartera.length?RAW.ref:null;return{
+  CLI:{rows:RAW.mov.filter(r=>r.s==='CLI'),orig:at?'Finnegans · Excel':null,at},
+  PRV:{rows:RAW.mov.filter(r=>r.s==='PRV'),orig:at?'Finnegans · Excel':null,at},
+  CHP:{rows:RAW.mov.filter(r=>r.s==='CHP'),orig:at?'Finnegans · Excel':null,at},
+  CHT:{rows:RAW.cartera,orig:at?'Finnegans · Excel':null,at},
   PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJC:{rows:[]},EJP:{rows:[]}}}
 function emptyData(){return Object.fromEntries(Object.keys(freshData()).map(k=>[k,{rows:[]}]))}
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
@@ -1227,7 +1227,7 @@ function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredential
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
 function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat})[S.tab]()}
 function renderAll(){
-  $('#pRef').value=S.ref;$('#pTc').value=nf1.format(S.tc);$('#pSaldo').value=S.saldo?nf0.format(S.saldo):'';$('#pHor').value=S.hor;$('#pChq').checked=S.incChq;
+  $('#pRef').value=S.ref;$('#pTc').value=S.tc>0?nf1.format(S.tc):'';$('#pSaldo').value=S.saldo?nf0.format(S.saldo):'';$('#pHor').value=S.hor;$('#pChq').checked=S.incChq;
   document.querySelectorAll('#pGran button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===S.gran));
   const ex=Object.entries(S.data).filter(([k,d])=>d.rows.some(r=>r.ej)).map(([k])=>SRC[k].n);
   const nx=(S.excl||[]).length,no=Object.keys(S.ovr||{}).length,ni=Object.keys(S.inc||{}).length;
@@ -1235,7 +1235,7 @@ function renderAll(){
   if($('#bOvr'))$('#bOvr').onclick=()=>{S.ovr={};save();renderAll()};
   if(ni){$('#exBanner').insertAdjacentHTML('beforeend',`<div class="banner"><span class="chip incc">Incobrables</span><span>${ni===1?'1 documento marcado':ni+' documentos marcados'} como incobrable${ni===1?'':'s'}. Se muestran en el flujo pero no suman a los ingresos.</span><button class="btn" id="bInc">Quitar todos</button></div>`);$('#bInc').onclick=()=>{S.inc={};save();renderAll()}}
   if($('#bAll'))$('#bAll').onclick=()=>{S.excl=[];save();renderAll()};
-  $('#sub').textContent='Saldos de Finnegans al '+fd(S.data.CLI.at||RAW.ref)+' · fecha de corte '+fd(S.ref);
+  $('#sub').textContent=(S.data.CLI.at?'Saldos de Finnegans al '+fd(S.data.CLI.at):'Sin saldos de Finnegans')+' · fecha de corte '+fd(S.ref);
   renderTab()}
 $('#pRef').onchange=e=>{if(e.target.value){S.ref=e.target.value;save();renderAll()}};
 $('#pTc').onchange=e=>{const v=num(e.target.value);if(v>0){S.tc=v;save()}renderAll()};

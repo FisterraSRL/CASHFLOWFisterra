@@ -12,7 +12,7 @@ const handler=require('../api/workspace.js');
 const reportHandler=require('../api/finnegans-report.js');
 const configHandler=require('../api/finnegans-config.js');
 const tokenHandler=require('../api/finnegans-token.js');
-const variables=['CASHFLOW_DATABASE_DATABASE_URL','CASHFLOW_DATABASE_URL','DATABASE_URL','CASHFLOW_ACCESS_KEY'];
+const variables=['CASHFLOW_DATABASE_DATABASE_URL','CASHFLOW_DATABASE_URL','DATABASE_URL','CASHFLOW_ACCESS_KEY','CASHFLOW_INSTALLATION_NAME'];
 const original=Object.fromEntries(variables.map(k=>[k,process.env[k]]));
 test.after(()=>{store.readWorkspace=oldRead;store.writeWorkspace=oldWrite;for(const [k,v]of Object.entries(original))if(v===undefined)delete process.env[k];else process.env[k]=v});
 
@@ -69,5 +69,8 @@ test('an incomplete deployment fails closed while local development stays availa
   assert.equal((await invoke(handler)).statusCode,401);
   delete process.env.CASHFLOW_ACCESS_KEY;
   delete process.env.CASHFLOW_DATABASE_DATABASE_URL;delete process.env.CASHFLOW_DATABASE_URL;delete process.env.DATABASE_URL;
+  process.env.CASHFLOW_INSTALLATION_NAME='Nubiral';
+  assert.equal((await invoke(handler)).statusCode,503);
+  delete process.env.CASHFLOW_INSTALLATION_NAME;
   const r=await invoke(handler);assert.equal(r.statusCode,200);assert.deepEqual(r.body,{mode:'local'});
 });
