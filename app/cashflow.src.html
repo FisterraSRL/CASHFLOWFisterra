@@ -248,7 +248,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.16">v1.0.16</span>
+    <span class="app-version" aria-label="Versión 1.0.17">v1.0.17</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -842,7 +842,7 @@ const CredentialVault=(()=>{
     })
   };
 })();
-const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
+const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,tokenPromise:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
 let credentialsReady=Promise.resolve();
 const vaultEncode=bytes=>btoa(String.fromCharCode(...bytes));
 const vaultDecode=text=>Uint8Array.from(atob(text),c=>c.charCodeAt(0));
@@ -927,6 +927,7 @@ async function persistCredentials(){
 }
 function credentialsChanged(){
   FAPI.clientId=$('#apiClientId').value;FAPI.clientSecret=$('#apiClientSecret').value;FAPI.credsVersion++;FAPI.saved=false;
+  clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;
   clearTimeout(FAPI.saveTimer);credentialMessage('Cambios pendientes de guardar.');
   if(FAPI.clientId.trim()&&FAPI.clientSecret.trim())FAPI.saveTimer=setTimeout(persistCredentials,250);
 }
@@ -973,7 +974,7 @@ const API_BATCH={busy:false,message:'',error:false,results:[]};
 function configuredApiSources(){return Object.keys(REPORT_FIELDS).filter(k=>!SHARED.enabled||!!SHARED.sources[k])}
 function batchSection(){
   const sources=configuredApiSources(),blocked=API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy);
-  return `<div class="card" style="margin-bottom:16px"><div class="toolbar"><div><h2>Actualizar fuentes por API</h2><p class="note">${sources.length?'Fuentes: '+esc(sources.map(k=>SRC[k].n).join(', '))+'.':'No hay fuentes API habilitadas.'} Se usan los parámetros guardados de cada origen y un token nuevo por consulta.</p></div><button type="button" class="btn pri" id="updateAllApis"${blocked?' disabled':''}>${API_BATCH.busy?'Actualizando APIs…':'Actualizar APIs'}</button></div><div class="msg${API_BATCH.error?' err':''}" role="status" aria-live="polite">${esc(API_BATCH.message)}</div>${API_BATCH.results.length?`<ul class="note">${API_BATCH.results.map(r=>`<li><b>${esc(SRC[r.k].n)}:</b> ${esc(r.message)}</li>`).join('')}</ul>`:''}</div>`;
+  return `<div class="card" style="margin-bottom:16px"><div class="toolbar"><div><h2>Actualizar fuentes por API</h2><p class="note">${sources.length?'Fuentes: '+esc(sources.map(k=>SRC[k].n).join(', '))+'.':'No hay fuentes API habilitadas.'} Se usan los parámetros guardados de cada origen y un token vigente, que se renueva cuando hace falta.</p></div><button type="button" class="btn pri" id="updateAllApis"${blocked?' disabled':''}>${API_BATCH.busy?'Actualizando APIs…':'Actualizar APIs'}</button></div><div class="msg${API_BATCH.error?' err':''}" role="status" aria-live="polite">${esc(API_BATCH.message)}</div>${API_BATCH.results.length?`<ul class="note">${API_BATCH.results.map(r=>`<li><b>${esc(SRC[r.k].n)}:</b> ${esc(r.message)}</li>`).join('')}</ul>`:''}</div>`;
 }
 async function updateAllApis(){
   if(API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy))return;
@@ -988,10 +989,13 @@ async function updateAllApis(){
     for(let i=0;i<sources.length;i++){
       const result=API_BATCH.results[i];result.status='busy';result.message='Consultando…';
       API_BATCH.message=`Actualizando ${i+1} de ${sources.length}: ${SRC[result.k].n}.`;if(S.tab==='dat')renderDat();
-      try{const outcome=await obtainReport(result.k);result.status=outcome?.status||'error';result.message=REPORT_STATE[result.k].message||'No se pudo completar la consulta.'}catch{result.status='error';result.message='No se pudo completar la consulta. Se conservaron los datos anteriores.'}
+      try{
+        const outcome=await obtainReport(result.k);result.status=outcome?.status||'error';result.message=REPORT_STATE[result.k].message||'No se pudo completar la consulta.';
+        if(outcome?.authFailed){for(const pending of API_BATCH.results.slice(i+1)){pending.status='skipped';pending.message='No se consultó porque falló la autenticación con Finnegans.'}break}
+      }catch{result.status='error';result.message='No se pudo completar la consulta. Se conservaron los datos anteriores.'}
     }
-    const updated=API_BATCH.results.filter(r=>r.status==='updated').length,empty=API_BATCH.results.filter(r=>r.status==='empty').length,errors=API_BATCH.results.filter(r=>r.status==='error').length;
-    API_BATCH.error=errors>0;API_BATCH.message=`Actualización finalizada: ${updated} fuente(s) actualizada(s), ${empty} sin registros y ${errors} con error. Las consultas vacías o fallidas conservan los datos anteriores.`;
+    const updated=API_BATCH.results.filter(r=>r.status==='updated').length,empty=API_BATCH.results.filter(r=>r.status==='empty').length,errors=API_BATCH.results.filter(r=>r.status==='error').length,skipped=API_BATCH.results.filter(r=>r.status==='skipped').length;
+    API_BATCH.error=errors>0;API_BATCH.message=`Actualización finalizada: ${updated} fuente(s) actualizada(s), ${empty} sin registros y ${errors} con error${skipped?`, ${skipped} sin consultar por falta de autenticación`:''}. Las consultas vacías o fallidas conservan los datos anteriores.`;
   }catch(e){API_BATCH.error=true;API_BATCH.message=e.message}
   finally{API_BATCH.busy=false;renderAll()}
 }
@@ -1041,9 +1045,11 @@ async function obtainReport(k){
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
-  state.busy=true;state.error=false;state.diagnostics=null;state.message='Obteniendo un token nuevo para consultar Finnegans…';renderDat();
+  state.busy=true;state.error=false;state.diagnostics=null;state.message='Preparando la conexión con Finnegans…';renderDat();
+  let tokenReady=shared;
   try{
-    const token=shared?null:await freshFinnegansToken();
+    const token=shared?null:await currentFinnegansToken();
+    tokenReady=true;
     filters.fecha=reportToday();
     state.message=k==='EJC'?'Consultando análisis de cobranza en Finnegans…':k==='EJP'?'Consultando análisis de órdenes de pago en Finnegans…':k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
     const response=await fetch('/api/finnegans-report',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
@@ -1062,7 +1068,7 @@ async function obtainReport(k){
     clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings,...extra};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
     return {status:'updated'};
-  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error'}}
+  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error',authFailed:!tokenReady}}
   finally{state.busy=false;renderAll()}
 }
 function apiSection(){
@@ -1077,7 +1083,7 @@ function apiSection(){
     </form>
     <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>
     <div id="apiMessage" class="msg api-message${FAPI.error?' err':active?' ok':''}" role="status" aria-live="polite">${esc(FAPI.message)}</div>
-    <p class="note">Cada consulta de datos obtiene automáticamente un token nuevo con estas credenciales. No hace falta probar la conexión antes de consultar.</p>
+    <p class="note">Cada consulta usa un token vigente con estas credenciales y lo renueva automáticamente cuando hace falta. No hace falta probar la conexión antes de consultar.</p>
     ${active?`<p class="note">Último token vigente hasta las ${new Intl.DateTimeFormat('es-AR',{hour:'2-digit',minute:'2-digit'}).format(new Date(FAPI.expiresAt))}.</p>`:''}
     <p class="note">La obtención del token está disponible en la versión web. Las cargas de Excel siguen disponibles debajo.</p>
   </div>`}
@@ -1089,22 +1095,29 @@ async function requestFinnegansToken(e){
   FAPI.clientId=clientId;FAPI.clientSecret=secret;
   try{await freshFinnegansToken()}catch{/* The connection panel already displays the error. */}
 }
+async function currentFinnegansToken(){
+  await credentialsReady;
+  if(FAPI.token&&FAPI.expiresAt-Date.now()>60000)return FAPI.token;
+  if(!FAPI.tokenPromise)FAPI.tokenPromise=freshFinnegansToken().finally(()=>{FAPI.tokenPromise=null});
+  return FAPI.tokenPromise;
+}
 async function freshFinnegansToken(){
   await credentialsReady;
   const clientId=FAPI.clientId.trim(),secret=FAPI.clientSecret;
+  const credentialsVersion=FAPI.credsVersion;
   if(!clientId||!secret.trim())throw new Error('Completá Client_ID y Client_Secret para consultar Finnegans.');
   if(location.protocol==='file:')throw new Error('Abrí la versión web para consultar Finnegans.');
   FAPI.authPending=(FAPI.authPending||0)+1;FAPI.busy=true;FAPI.error=false;FAPI.message='Solicitando un token nuevo a Finnegans…';
-  clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;
   const payload=JSON.stringify({client_id:clientId,client_secret:secret});
   if(S.tab==='dat')renderDat();
   try{
-    await persistCredentials();
+    if(!FAPI.saved)await persistCredentials();
     const response=await fetch('/api/finnegans-token',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:payload,cache:'no-store',signal:AbortSignal.timeout(25000)});
     const data=await response.json().catch(()=>null);
+    if(credentialsVersion!==FAPI.credsVersion)throw new Error('Las credenciales cambiaron durante la consulta. Volvé a intentar.');
     if(!response.ok)throw new Error(data&&data.error||'No se pudo obtener el token. Intentá nuevamente.');
     if(!data||typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=0)throw new Error('Finnegans devolvió una respuesta de autenticación no válida.');
-    FAPI.token=data.access_token;FAPI.expiresAt=Date.now()+Math.min(data.expires_in,3600)*1000;
+    clearTimeout(FAPI.timer);FAPI.token=data.access_token;FAPI.expiresAt=Date.now()+Math.min(data.expires_in,3600)*1000;
     FAPI.message='Conexión con Finnegans verificada correctamente.';
     clearTimeout(FAPI.timer);
     FAPI.timer=setTimeout(()=>{FAPI.token='';FAPI.expiresAt=0;FAPI.message='El último token venció. La próxima consulta obtendrá uno nuevo automáticamente.';if(S.tab==='dat')renderDat()},Math.max(0,FAPI.expiresAt-Date.now()));

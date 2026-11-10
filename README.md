@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.16**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.17**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -96,7 +96,7 @@ Las pruebas automatizadas de esta modalidad están en `tests/workspace.test.cjs`
 
 En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios, Cheques de terceros, Cobros ejecutados y Pagos ejecutados, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
 
-Las consultas se ejecutan una a continuación de otra, con un token nuevo y la fecha de hoy para cada origen. La pantalla muestra progreso y el resultado individual: actualizado, sin registros o error. Un error no detiene las demás fuentes. Las consultas vacías o fallidas conservan los datos anteriores, y los orígenes disponibles solo por Excel no se modifican. Se bloquean ejecuciones duplicadas y cambios de las cargas durante la actualización.
+Las consultas se ejecutan una a continuación de otra, con un token vigente y la fecha de hoy para cada origen. El token se renueva al vencer; las seis fuentes pueden reutilizar el mismo token durante la sesión, según la recomendación de Finnegans. La pantalla muestra progreso y el resultado individual: actualizado, sin registros o error. Un error de reporte no detiene las demás fuentes; si falla la autenticación, se detiene la tanda y se indican las fuentes no consultadas. Las consultas vacías o fallidas conservan los datos anteriores, y los orígenes disponibles solo por Excel no se modifican. Se bloquean ejecuciones duplicadas y cambios de las cargas durante la actualización.
 
 La prueba de navegador `tests/browser/update-apis.cjs` verifica esta acción con respuestas simuladas, incluidos fallos parciales, resultados vacíos y configuración compartida. Requiere Playwright y Microsoft Edge; `PLAYWRIGHT_MODULE` permite indicar la ruta de instalación de Playwright.
 
@@ -135,7 +135,7 @@ La conexión compartida solo debe activarse junto con `DATABASE_URL` y `CASHFLOW
 
 **Olvidar credenciales** elimina las credenciales locales y, en modo compartido, marca como eliminada la copia central; vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
 
-Cada consulta de datos solicita un token nuevo con las credenciales recuperadas, aunque exista otro token vigente. El token recién obtenido se pasa a la función del reporte, que lo agrega como parámetro `ACCESS_TOKEN` a la URL de Finnegans. Cada consulta conserva su propio token, incluso cuando se consultan dos fuentes a la vez. Si falla la autenticación, no se consulta el reporte ni se reemplazan datos.
+Cada consulta de datos usa un token vigente con las credenciales recuperadas. La app solicita uno nuevo si no tiene token o si falta menos de un minuto para su vencimiento; el token se pasa a la función del reporte, que lo agrega como parámetro `ACCESS_TOKEN` a la URL de Finnegans. **Probar conexión** solicita un token nuevo. Si falla la autenticación, no se consulta el reporte ni se reemplazan datos. El servidor reintenta una vez los errores HTTP 5xx de autenticación y muestra el código HTTP, sin revelar la respuesta ni las credenciales. La app no vuelve a guardar credenciales idénticas por cada consulta.
 
 El último token se conserva únicamente en memoria de la página durante hasta una hora para mostrar el estado de conexión. Recargar, cerrar o seleccionar **Desconectar** lo elimina de la app; no revoca el token en Finnegans ni impide que la próxima consulta obtenga uno nuevo.
 
@@ -151,7 +151,7 @@ Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoPr
 
 La pastilla **Cheques propios → Parámetros de cheques propios** permite guardar Estado, Tercero, Circuito contable, Cuenta contable, Empresa/sucursal, Vencimiento desde/hasta y Mostrar solo no conciliados. No hay selector de tipo: el servidor siempre envía `TipoCheque=0`, aunque existiera otro valor guardado en el navegador o en Vercel. Los nombres de parámetros respetan las mayúsculas del endpoint: `FechaHasta`, `TipoCheque`, `Estado`, `Organizacion`, `CircuitoContable`, `CuentaContable`, `Empresa`, `FechaVencimientoDesde`, `FechaVencimientoHasta` y `MostrarSoloNoConciliados`, todos con prefijo `PARAMWEBREPORT_`.
 
-`FechaHasta` siempre es hoy (Argentina); los límites de vencimiento son opcionales y persisten. No se fijan las fechas de 2020 del ejemplo. `MostrarSoloNoConciliados` se envía explícitamente como `false` por defecto, o `true` si se elige Sí. Seleccionar el estado y/o solo no conciliados que corresponda para evitar proyectar cheques ya pagados. Cada consulta obtiene un token nuevo y lo envía como `ACCESS_TOKEN`.
+`FechaHasta` siempre es hoy (Argentina); los límites de vencimiento son opcionales y persisten. No se fijan las fechas de 2020 del ejemplo. `MostrarSoloNoConciliados` se envía explícitamente como `false` por defecto, o `true` si se elige Sí. Seleccionar el estado y/o solo no conciliados que corresponda para evitar proyectar cheques ya pagados. Cada consulta usa un token vigente y lo envía como `ACCESS_TOKEN`.
 
 El adaptador reconoce fecha de vencimiento, tercero, número/documento, importe, moneda, estado, cuenta y banco. Reconoce los campos reales `IMPORTEMONTRANSACCION`, `FECHAVENCIMIENTO`, `FECHAEMISION`, `TERCERO` y `CONCILIADO`, verificados en la respuesta del 10/11/2026 con `TipoCheque=0`. Los importes se incorporan como egresos en **Cheques emitidos**, conservando su vencimiento. Los registros conciliados se conservan en la carga pero no generan flujo ni alertas pendientes. Si la respuesta usa campos no reconocidos, falla la carga completa y **Ver llamada y respuesta de Finnegans** permite revisar el JSON sin perder la carga anterior.
 
@@ -159,7 +159,7 @@ En modo compartido se habilita con `FINNEGANS_CHP_FILTERS`, por ejemplo `{"empre
 
 ### Cheques de terceros por API
 
-**Cheques de terceros → Obtener por API** usa el mismo endpoint de situación de cheques, con `PARAMWEBREPORT_TipoCheque=1` fijo en el servidor, sin selector. Tiene los mismos parámetros que Cheques propios, guardados de forma independiente: Estado, Tercero, Circuito, Cuenta contable, Empresa/sucursal, fechas de vencimiento desde/hasta y Mostrar solo no conciliados. `FechaHasta` siempre es hoy en Argentina y cada consulta obtiene un token nuevo.
+**Cheques de terceros → Obtener por API** usa el mismo endpoint de situación de cheques, con `PARAMWEBREPORT_TipoCheque=1` fijo en el servidor, sin selector. Tiene los mismos parámetros que Cheques propios, guardados de forma independiente: Estado, Tercero, Circuito, Cuenta contable, Empresa/sucursal, fechas de vencimiento desde/hasta y Mostrar solo no conciliados. `FechaHasta` siempre es hoy en Argentina y cada consulta usa un token vigente.
 
 Los importes son positivos, en su moneda original. Se conservan banco, cuenta, estado, conciliación y vencimiento. Se aplican las reglas existentes del flujo: **En Cartera** genera cobro; **Cheque Depositado** solo se proyecta si la cuenta es de valores a depositar y el vencimiento es desde el corte. Endosados, descontados, conciliados y otros estados sin disponibilidad no generan un nuevo ingreso. Los estados no reconocidos se conservan con advertencia y no se proyectan; la falta de estado o una fila inválida rechaza la importación completa.
 
@@ -167,7 +167,7 @@ En modo compartido se habilita con `FINNEGANS_CHT_FILTERS`, por ejemplo `{"empre
 
 ### Cobros ejecutados por API
 
-La pastilla **Cobros ejecutados → Obtener por API** consulta `analisisCobranza`. Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Cliente`, `Empresa`. Los filtros vacíos se omiten; por defecto FechaDesde es el inicio del mes actual y DetallarAplicacion es `true`. Los filtros persisten; FechaHasta siempre es hoy en Argentina y cada consulta obtiene un token nuevo. La carga reemplaza los cobros del período anterior consultado en esta fuente; no modifica pagos ni otras fuentes.
+La pastilla **Cobros ejecutados → Obtener por API** consulta `analisisCobranza`. Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Cliente`, `Empresa`. Los filtros vacíos se omiten; por defecto FechaDesde es el inicio del mes actual y DetallarAplicacion es `true`. Los filtros persisten; FechaHasta siempre es hoy en Argentina y cada consulta usa un token vigente. La carga reemplaza los cobros del período anterior consultado en esta fuente; no modifica pagos ni otras fuentes.
 
 La respuesta real contiene medios de cobro `TIPOOP=OPT` y aplicaciones a facturas `TIPOOP=APL`. El total se obtiene sumando **IMPORTE de las filas OPT**, incluidos bancos, cheques y retenciones según lo solicitado. Las APL se conservan como detalle y no vuelven a sumarse. Se usa **FECHACOBRANZA** para el día y mes del ejecutado: FECHA puede ser la fecha de una factura anterior. IMPORTE es el valor en moneda principal; el tipo de cambio actual de la pantalla no revaloriza lo ejecutado.
 
@@ -179,7 +179,7 @@ En modo compartido, `FINNEGANS_EJC_FILTERS` admite `empresa`, `fechaDesde`, `tra
 
 ### Pagos ejecutados por API
 
-La pastilla **Pagos ejecutados → Obtener por API** consulta `AnalisisOrdenPago` (respetando mayúsculas). Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Proveedor`, `Empresa`. Los filtros persisten por separado de cobranza. La fecha hasta es siempre hoy en Argentina, la fecha desde es editable y cada consulta obtiene un token nuevo. DetallarAplicacion es `true` por defecto.
+La pastilla **Pagos ejecutados → Obtener por API** consulta `AnalisisOrdenPago` (respetando mayúsculas). Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Proveedor`, `Empresa`. Los filtros persisten por separado de cobranza. La fecha hasta es siempre hoy en Argentina, la fecha desde es editable y cada consulta usa un token vigente. DetallarAplicacion es `true` por defecto.
 
 El total suma **IMPORTE de las filas OPT**, incluidos todos los medios y retenciones registrados. Las APL se conservan como detalle sin volver a sumarse. Para movimientos OPT se usa **FECHA** (o FechaPago si estuviera disponible); no se exige FECHACOBRANZA, que puede estar vacío en este reporte. En aplicaciones sin fecha explícita se vincula Empresa + Documento a los movimientos de su propia orden de pago. Solo se utiliza una fecha inequívoca de pago; nunca se usa la fecha de la factura aplicada. Fechas inválidas, fuera de rango o ambiguas rechazan la importación sin reemplazar la carga anterior.
 
@@ -189,7 +189,7 @@ En modo compartido se habilita con `FINNEGANS_EJP_FILTERS`, que admite `empresa`
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
-3. Seleccionar **Obtener por API**. La app obtiene un token nuevo y luego consulta el reporte. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
+3. Seleccionar **Obtener por API**. La app usa un token vigente o solicita uno nuevo si hace falta y luego consulta el reporte. Una respuesta válida y no vacía reemplaza los registros de esa fuente y borra sus reprogramaciones e incobrables, igual que una nueva carga de Excel.
 
 Parámetros comunes: fecha, organización, circuito contable, cuenta, moneda y empresa. Proveedores agrega dimensión, valor de dimensión y tipo de documento. Los nombres y mayúsculas de los parámetros se conservan según los endpoints indicados.
 

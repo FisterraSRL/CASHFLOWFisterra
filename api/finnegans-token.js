@@ -42,23 +42,28 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({error: 'Completá Client_ID y Client_Secret con credenciales válidas.'});
   }
   try {
-    const response = await fetch('https://api.finneg.com/api/oauth/token', {
-      method: 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        authorization: `Basic ${secret}`,
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'text/plain',
-      },
-      body: new URLSearchParams({grant_type: 'client_credentials', client_id: id}).toString(),
-    });
+    let response;
+    for(let attempt=0;attempt<2;attempt++){
+      response=await fetch('https://api.finneg.com/api/oauth/token', {
+        method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          authorization: `Basic ${secret}`,
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'text/plain',
+        },
+        body: new URLSearchParams({grant_type: 'client_credentials', client_id: id}).toString(),
+      });
+      if(response.status<500||attempt===1)break;
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
     if (!response.ok) {
       if (response.status === 400 || response.status === 401 || response.status === 403) {
         return res.status(401).json({error: 'Finnegans rechazó las credenciales. Revisá Client_ID, Client_Secret y que el usuario esté activo.'});
       }
       if (response.status === 429) return res.status(429).json({error: 'Finnegans recibió demasiadas solicitudes. Esperá unos minutos antes de reintentar.'});
-      return res.status(502).json({error: 'Finnegans no está disponible en este momento. Intentá nuevamente más tarde.'});
+      return res.status(502).json({error: `El servicio de autenticación de Finnegans respondió HTTP ${response.status}. Intentá nuevamente más tarde.`});
     }
     const token = (await response.text()).trim();
     if (!token || token.length > 16384 || !/^[A-Za-z0-9._~+\/-]+=*$/.test(token)) {

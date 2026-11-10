@@ -63,7 +63,14 @@ test('returns credential errors without exposing provider response or secrets',a
 test('handles provider outage and throttling separately',async()=>{
   for(const [upstream,expected]of [[500,502],[429,429]]){
     const r=await invoke(request(),async()=>new Response('internal',{status:upstream}));assert.equal(r.statusCode,expected);
+    if(upstream===500)assert.match(r.body.error,/HTTP 500/);
   }
+});
+test('retries a transient Finnegans server error once without exposing provider details',async()=>{
+  let calls=0;
+  const r=await invoke(request(),async()=>++calls===1?new Response('private detail',{status:500}):new Response('recovered.token'));
+  assert.equal(calls,2);assert.equal(r.statusCode,200);assert.equal(r.body.access_token,'recovered.token');
+  assert.ok(!JSON.stringify(r.body).includes('private detail'));
 });
 test('does not accept empty or HTML responses as a token',async()=>{
   for(const token of ['', '<html>Provider error</html>']){
