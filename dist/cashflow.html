@@ -284,7 +284,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.8">v1.0.8</span>
+    <span class="app-version" aria-label="Versión 1.0.9">v1.0.9</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -685,8 +685,9 @@ function executedReport(){
   const sum=rows=>rows.reduce((total,r)=>total+Number(r.imp),0);
   const monthly=selected.map(m=>{const a=inRows.filter(r=>r.mes===m),b=outRows.filter(r=>r.mes===m);return {mes:m,in:sum(a),out:sum(b),hasIn:!!a.length,hasOut:!!b.length,complete:!!a.length&&!!b.length}});
   const complete=monthly.length>0&&monthly.every(m=>m.complete),income=sum(inRows),payments=sum(outRows);
-  const group=rows=>Object.entries(rows.reduce((a,r)=>{const v=a[r.cat]||(a[r.cat]={amount:0,count:0});v.amount+=Number(r.imp);v.count++;return a},{})).map(([cat,v])=>({cat,...v})).sort((a,b)=>b.amount-a.amount);
-  return {months,monthly,inRows,outRows,income,payments,complete,net:complete?income-payments:null,coverage:complete&&payments>0?income/payments:null,inCats:group(inRows),outCats:group(outRows)};
+  const group=(rows,field='cat')=>Object.entries(rows.reduce((a,r)=>{const v=a[r[field]]||(a[r[field]]={amount:0,count:0});v.amount+=Number(r.imp);v.count++;return a},{})).map(([cat,v])=>({cat,...v})).sort((a,b)=>b.amount-a.amount);
+  const applications=(S.data.EJC.applications||[]).filter(r=>selected.includes(r.mes));
+  return {months,monthly,inRows,outRows,income,payments,complete,net:complete?income-payments:null,coverage:complete&&payments>0?income/payments:null,inCats:group(inRows),outCats:group(outRows),accounts:group(inRows.filter(r=>r.account),'account'),applications};
 }
 function renderExecuted(){
   const v=$('#v-eje'),R=executedReport();
@@ -706,7 +707,9 @@ function renderExecuted(){
    <div class="card" style="margin-top:16px"><h2>Análisis del ejecutado</h2><ul class="exec-analysis">${observations.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>
    <div class="card" style="margin-top:16px"><h2>Evolución mensual</h2><div class="tblwrap"><table><thead><tr><th>Mes</th><th>Cobros ($)</th><th>Pagos ($)</th><th>Neto ($)</th><th>Cobertura</th></tr></thead><tbody>${R.monthly.map(m=>`<tr><td>${monthName(m.mes)}</td><td class="pos">${m.hasIn?$f(m.in):'Sin datos'}</td><td class="neg">${m.hasOut?$f(-m.out):'Sin datos'}</td><td>${m.complete?$f(m.in-m.out):'Sin datos'}</td><td>${m.complete&&m.out>0?nf1.format(m.in/m.out*100)+' %':'–'}</td></tr>`).join('')}</tbody></table></div></div>
    <div class="exec-grid">${categoryTable('EJC',R.inCats,R.income,'Cobros por categoría')}${categoryTable('EJP',R.outCats,R.payments,'Pagos por categoría')}</div>
-   <div class="card" style="margin-top:16px"><details><summary>Ver registros de los reportes (${records.length})</summary><div class="tblwrap"><table><thead><tr><th>Mes</th><th>Tipo</th><th>Categoría</th><th>Importe ($)</th></tr></thead><tbody>${records.map(r=>`<tr><td>${monthName(r.mes)}</td><td>${r.type}</td><td>${esc(r.cat)}${r.ej?' · Ejemplo':''}</td><td>${$f(r.type==='Pago'?-r.imp:r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>`;
+   ${R.accounts.length?`<div class="card" style="margin-top:16px"><h2>Cobros por cuenta y medio</h2><p class="note">Incluye bancos, cheques y retenciones según el reporte de cobranza. Las aplicaciones a facturas se muestran aparte, sin duplicar el total.</p><div class="tblwrap"><table><thead><tr><th>Cuenta</th><th>Registros</th><th>Cobrado ($)</th></tr></thead><tbody>${R.accounts.map(r=>`<tr><td>${esc(r.cat)}</td><td>${r.count}</td><td>${$f(r.amount)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
+   <div class="card" style="margin-top:16px"><details><summary>Ver registros de los reportes (${records.length})</summary><div class="tblwrap"><table><thead><tr><th>Mes</th><th>Fecha</th><th>Tipo</th><th>Cliente / tercero</th><th>Comprobante</th><th>Cuenta / medio</th><th>Categoría</th><th>Importe ($)</th></tr></thead><tbody>${records.map(r=>`<tr><td>${monthName(r.mes)}</td><td>${r.f?fd(r.f):'–'}</td><td>${r.type}</td><td>${esc(r.p||'–')}</td><td>${esc(r.doc||'–')}</td><td>${esc(r.account||'–')}</td><td>${esc(r.cat)}${r.ej?' · Ejemplo':''}</td><td>${$f(r.type==='Pago'?-r.imp:r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>
+   ${R.applications.length?`<div class="card" style="margin-top:16px"><details><summary>Aplicaciones a comprobantes (${R.applications.length})</summary><p class="note">Detalle de las facturas aplicadas a las cobranzas. Estos importes no se suman al cobrado.</p><div class="tblwrap"><table><thead><tr><th>Fecha de cobranza</th><th>Cliente</th><th>Cobranza</th><th>Documento aplicado</th><th>Importe aplicado ($)</th></tr></thead><tbody>${R.applications.map(r=>`<tr><td>${fd(r.f)}</td><td>${esc(r.p)}</td><td>${esc(r.doc)}</td><td>${esc(r.appliedDoc||'–')}</td><td>${$f(r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>`:''}`;
   $('#execMonth').onchange=e=>{S.execMonth=e.target.value;save();renderExecuted()};$('#execGoDat').onclick=()=>setTab('dat');
 }
 function renderPpt(){
@@ -799,9 +802,9 @@ async function restoreSharedConnection(){
     if(!response.ok)return;const config=await response.json();
     if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
     SHARED.enabled=true;SHARED.sources=config.sources;
-    for(const k of ['CLI','PRV','CHP','CHT'])if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
+    for(const k of Object.keys(REPORT_FIELDS))if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
     renderAll();
-    await Promise.all(['CLI','PRV','CHP','CHT'].filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
+    await Promise.all(Object.keys(REPORT_FIELDS).filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
   }catch{/* Local mode remains available if shared configuration cannot be reached. */}
 }
 async function testSharedConnection(){
@@ -846,6 +849,7 @@ async function restoreCredentials(){
 }
 const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
 REPORT_FIELDS.CHT=REPORT_FIELDS.CHP.map(field=>[...field]);
+REPORT_FIELDS.EJC=[['fechaDesde','Fecha desde'],['transaccionSubtipoID','Tipo de documento (ID)'],['circuitocontable','Circuito contable'],['detallarAplicacion','Detallar aplicación'],['cliente','Cliente'],['empresa','Empresa / sucursal']];
 const REPORT_FILTER_KEY=LS+'-report-filters';
 function reportToday(){
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en',{timeZone:'America/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
@@ -856,7 +860,7 @@ function restoreReportFilters(){
   try{stored=JSON.parse(localStorage.getItem(REPORT_FILTER_KEY)||'null')}catch{failed=true}
   return Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>{
     const saved=stored?.v===1&&stored.filters&&Object.prototype.hasOwnProperty.call(stored.filters,k)?stored.filters[k]:S.data[k]?.filters;
-    const filters=Object.fromEntries(fields.map(([key])=>[key,typeof saved?.[key]==='string'?saved[key].slice(0,256):'']));
+    const filters=Object.fromEntries(fields.map(([key])=>[key,typeof saved?.[key]==='string'&&saved[key]!==''?saved[key].slice(0,256):key==='fechaDesde'?reportToday().slice(0,7)+'-01':key==='detallarAplicacion'?'true':'']));
     return [k,{filters,busy:false,message:failed?'No se pudieron recuperar los parámetros guardados.':'',error:failed}];
   }));
 }
@@ -907,22 +911,23 @@ function reportDiagnosticsHTML(k){
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
   const cheque=k==='CHP'||k==='CHT';
-  const title=cheque?(k==='CHP'?'Parámetros de cheques propios':'Parámetros de cheques de terceros'):'Parámetros de composición de saldos';
+  const title=k==='EJC'?'Parámetros de cobranza':cheque?(k==='CHP'?'Parámetros de cheques propios':'Parámetros de cheques de terceros'):'Parámetros de composición de saldos';
   const chequeNote=cheque?`<p class="note">Tipo de cheque fijo: ${k==='CHT'?'De tercero (TipoCheque = 1)':'Propio (TipoCheque = 0)'}. Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Los cheques marcados como conciliados se conservan en la carga, pero se excluyen del flujo y las alertas.${k==='CHT'?' Solo se proyectan los valores disponibles según su estado y cuenta; los endosados y descontados no generan un nuevo cobro.':''}</p>`:'';
   if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p>${chequeNote}</details>`;
-  const r=REPORT_STATE[k],fields=[['fecha',cheque?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
+  const r=REPORT_STATE[k],fields=[['fecha',cheque||k==='EJC'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
   const control=(key)=>{
     const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy||API_BATCH.busy?' disabled':''}`;
-    if(key==='mostrarSoloNoConciliados')return `<select ${attrs}><option value="false"${r.filters[key]!=='true'?' selected':''}>No</option><option value="true"${r.filters[key]==='true'?' selected':''}>Sí</option></select>`;
-    const dateField=key==='fecha'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
+    if(key==='mostrarSoloNoConciliados'||key==='detallarAplicacion'){const value=r.filters[key]||(key==='detallarAplicacion'?'true':'false');return `<select ${attrs}><option value="false"${value==='false'?' selected':''}>No</option><option value="true"${value==='true'?' selected':''}>Sí</option></select>`}
+    const dateField=key==='fecha'||key==='fechaDesde'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
     return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
   };
-  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}</details>`;
+  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'?'<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al cobrado. El mes se determina por la fecha de cobranza.</p>':''}</details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return {status:'skipped'};
   const shared=SHARED.enabled&&!!SHARED.sources[k];
   const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:reportToday()};
+  if(k==='EJC'){filters.fechaDesde=filters.fechaDesde||filters.fecha.slice(0,7)+'-01';filters.detallarAplicacion=filters.detallarAplicacion||'true'}
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
   if(location.protocol==='file:'){state.error=true;state.message='Abrí la versión web para consultar los reportes API.';renderDat();return}
@@ -930,7 +935,7 @@ async function obtainReport(k){
   try{
     const token=shared?null:await freshFinnegansToken();
     filters.fecha=reportToday();
-    state.message=k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
+    state.message=k==='EJC'?'Consultando análisis de cobranza en Finnegans…':k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
     const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
     const data=await response.json().catch(()=>null);
     if(data?.diagnostics)state.diagnostics=data.diagnostics;
@@ -941,7 +946,8 @@ async function obtainReport(k){
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
     if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return {status:'empty'}}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
-    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings};save();
+    const extra=k==='EJC'?{applications:Array.isArray(data.applications)?data.applications:[],summary:data.summary||null}:{};
+    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings,...extra};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
     return {status:'updated'};
   }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error'}}
@@ -1008,7 +1014,7 @@ function renderDat(){
     <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button>${k==='EJC'||k==='EJP'?'<button class="btn" data-exec-results>Ver resultados</button>':''}</div>`:''}
     <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
-  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores, cheques propios y de terceros: API disponible · otras fuentes: Excel o integración pendiente</p>
+  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores, cheques y cobros ejecutados: API disponible · otras fuentes: Excel o integración pendiente</p>
   <div class="prose"><p>Clientes y Proveedores consultan composición de saldos. Cheques propios y de terceros consultan situación de cheques con TipoCheque fijo: 0 (Propio) y 1 (De tercero), respectivamente. El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>

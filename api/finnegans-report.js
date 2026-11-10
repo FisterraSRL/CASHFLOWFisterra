@@ -1,5 +1,5 @@
 'use strict';
-const {reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs');
+const {REPORTS,reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs');
 const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 
@@ -14,7 +14,7 @@ module.exports=async function handler(req,res){
   let body=req.body;
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>24000)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
   const shared=body?.shared===true,config=shared?sharedConfig():null;
-  if(shared&&(!['CLI','PRV','CHP','CHT'].includes(body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros de empresa y cuenta en Vercel.'});
+  if(shared&&(!Object.hasOwn(REPORTS,body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros en Vercel.'});
   // Shared callers can never widen the configured company/account scope.
   if(shared)body.filters={...config.sources[body.source].filters,fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
   let token=body?.access_token;
@@ -38,7 +38,7 @@ module.exports=async function handler(req,res){
     let payload;
     try{payload=JSON.parse(text)}catch{return fail(502,'Finnegans no devolvió un reporte JSON válido. Se conservaron los datos anteriores.')}
     let normalized;
-    try{normalized=normalizeReport(body.source,payload,body.filters.fecha)}catch(error){return fail(422,error.message)}
+    try{normalized=normalizeReport(body.source,payload,body.filters.fecha,body.filters)}catch(error){return fail(422,error.message)}
     if(Buffer.byteLength(JSON.stringify({...normalized,diagnostics}))>4*1024*1024)return fail(413,'El reporte es demasiado grande. Acotá los filtros.');
     return res.status(200).json({...normalized,source:body.source,date:body.filters.fecha,diagnostics});
   }catch(error){

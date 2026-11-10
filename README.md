@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.8**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.9**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -21,7 +21,7 @@ La fuente anterior **Ejecutado** se divide en **Cobros ejecutados** y **Pagos ej
 
 Al abrir esta versión, los datos de Ejecutado ya guardados se separan automáticamente por categoría, conservando mes, importes y procedencia. La carga original se mantiene como respaldo de migración en el navegador. **Presupuesto vs real** combina ambas fuentes; si para un mes solo hay cobros o solo pagos cargados, indica **Ejecutado parcial** y muestra **Sin datos** en el tipo faltante, sin calcularle un desvío ficticio contra cero.
 
-Las APIs de estas dos nuevas fuentes todavía no están configuradas, por lo que **Actualizar APIs** continúa consultando Clientes, Proveedores y Cheques, sin modificar los ejecutados cargados por Excel.
+Cobros ejecutados dispone de la API `analisisCobranza` y se incluye en **Actualizar APIs**. Pagos ejecutados sigue disponible por plantilla Excel hasta configurar su API.
 
 ### Resultados y análisis
 
@@ -73,7 +73,7 @@ Los cambios enviados a `main` disparan el despliegue si está activa la integrac
 
 ### Actualizar todas las APIs
 
-En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios y Cheques de terceros, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
+En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios, Cheques de terceros y Cobros ejecutados, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
 
 Las consultas se ejecutan una a continuación de otra, con un token nuevo y la fecha de hoy para cada origen. La pantalla muestra progreso y el resultado individual: actualizado, sin registros o error. Un error no detiene las demás fuentes. Las consultas vacías o fallidas conservan los datos anteriores, y los orígenes disponibles solo por Excel no se modifican. Se bloquean ejecuciones duplicadas y cambios de las cargas durante la actualización.
 
@@ -101,8 +101,9 @@ Para que un navegador nuevo pueda consultar clientes y proveedores sin volver a 
 | `FINNEGANS_CLIENT_SECRET` | Client_Secret / SECRET_KEY del mismo usuario |
 | `FINNEGANS_CLI_FILTERS` | `{"empresa":"EMPRE01","cuenta":"DxVta","moneda":"PES"}` |
 | `FINNEGANS_PRV_FILTERS` | `{"empresa":"EMPRE01","cuenta":"2.1.1/01/01","moneda":"PES"}` |
+| `FINNEGANS_EJC_FILTERS` | `{"empresa":"EMPRE01","detallarAplicacion":"true"}` |
 
-Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para habilitar cada fuente y no permite ampliarlas desde el navegador. La fecha se calcula en el servidor con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por el reporte dentro del JSON.
+Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para saldos/cheques; cobranza exige empresa y no tiene filtro de cuenta. No permite ampliar estos filtros desde el navegador. La fecha hasta se calcula en el servidor con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por el reporte dentro del JSON.
 
 `GET /api/finnegans-config` informa si está habilitada la conexión y sus filtros; no devuelve credenciales ni tokens. **Probar conexión** valida las credenciales desde el servidor sin devolver el token. Cada consulta compartida obtiene un token nuevo desde Vercel y lo usa para consultar el reporte. No guardar las credenciales en GitHub ni en variables con prefijo público.
 
@@ -141,6 +142,18 @@ En modo compartido se habilita con `FINNEGANS_CHP_FILTERS`, por ejemplo `{"empre
 Los importes son positivos, en su moneda original. Se conservan banco, cuenta, estado, conciliación y vencimiento. Se aplican las reglas existentes del flujo: **En Cartera** genera cobro; **Cheque Depositado** solo se proyecta si la cuenta es de valores a depositar y el vencimiento es desde el corte. Endosados, descontados, conciliados y otros estados sin disponibilidad no generan un nuevo ingreso. Los estados no reconocidos se conservan con advertencia y no se proyectan; la falta de estado o una fila inválida rechaza la importación completa.
 
 En modo compartido se habilita con `FINNEGANS_CHT_FILTERS`, por ejemplo `{"empresa":"EMPRE01","cuenta":"CODIGO_VALORES_A_DEPOSITAR","mostrarSoloNoConciliados":"false"}`. Los filtros no se heredan de cheques propios. En esta fuente el tipo es siempre `1`, aunque existiera un valor distinto guardado.
+
+### Cobros ejecutados por API
+
+La pastilla **Cobros ejecutados → Obtener por API** consulta `analisisCobranza`. Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Cliente`, `Empresa`. Los filtros vacíos se omiten; por defecto FechaDesde es el inicio del mes actual y DetallarAplicacion es `true`. Los filtros persisten; FechaHasta siempre es hoy en Argentina y cada consulta obtiene un token nuevo. La carga reemplaza los cobros del período anterior consultado en esta fuente; no modifica pagos ni otras fuentes.
+
+La respuesta real contiene medios de cobro `TIPOOP=OPT` y aplicaciones a facturas `TIPOOP=APL`. El total se obtiene sumando **IMPORTE de las filas OPT**, incluidos bancos, cheques y retenciones según lo solicitado. Las APL se conservan como detalle y no vuelven a sumarse. Se usa **FECHACOBRANZA** para el día y mes del ejecutado: FECHA puede ser la fecha de una factura anterior. IMPORTE es el valor en moneda principal; el tipo de cambio actual de la pantalla no revaloriza lo ejecutado.
+
+En **Ejecutado** se muestran cuentas/medios, cliente, comprobante, fecha de cobranza y detalle de aplicaciones. Las retenciones se agrupan en Otros ingresos y los cheques en Cheques en cartera, conservando siempre su cuenta original. El total de cobranza incluye las retenciones y cheques recibidos, no solo los movimientos bancarios.
+
+La consulta real de noviembre de 2026 se reconcilió sumando los medios de cobro por cuenta y comprobando que las aplicaciones no duplican el total. Los importes y datos reales de auditoría quedan en `data/private/`, fuera de Git; las pruebas publicadas usan datos simulados.
+
+En modo compartido, `FINNEGANS_EJC_FILTERS` admite `empresa`, `fechaDesde`, `transaccionSubtipoID`, `circuitocontable`, `detallarAplicacion` y `cliente`. Sin fechaDesde, el servidor usa el inicio del mes actual. No incluye tokens ni credenciales en el navegador.
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
