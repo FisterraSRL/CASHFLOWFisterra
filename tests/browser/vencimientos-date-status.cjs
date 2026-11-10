@@ -18,6 +18,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       for(const key of Object.keys(S.data))S.data[key]={rows:[],orig:'Prueba'};
       const today=reportToday(),tomorrow=addD(today,1),yesterday=addD(today,-1);
       S.ref=addD(today,20);S.calM=tomorrow.slice(0,7);S.calF='all';
+      S.data.CLI.rows=[{s:'CLI',id:'CLI-future',f:tomorrow,m:300,c:'ARS',p:'Factura futura',doc:'FCV-07 - 315',comprobante:'A-00007-00000535',cat:'Cobranza clientes'}];
       S.data.CHT.rows=[
         {s:'CHT',id:'CHT-future',f:tomorrow,m:100,c:'ARS',p:'Cheque futuro',doc:'Ch 111 · COB - 1',cat:'Cheques en cartera',e:'En Cartera'},
         {s:'CHT',id:'CHT-past',f:yesterday,m:200,c:'ARS',p:'Cheque pasado',doc:'Ch 222 · COB - 2',cat:'Cheques en cartera',e:'En Cartera'}
@@ -29,7 +30,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     assert.equal(await page.locator(`#v-ven [data-f="${dates.tomorrow}"]`).evaluate(el=>el.classList.contains('past')),false);
     await page.locator(`#v-ven [data-f="${dates.tomorrow}"]`).click();
     assert.equal(await page.locator('#drawerHost .chip').filter({hasText:'Vencido'}).count(),0);
-    assert.equal(await page.locator('#drawerHost .li').count(),1);
+    assert.equal(await page.locator('#drawerHost .li').count(),2);
+    const detail=await page.locator('#drawerHost .body').innerText();
+    assert.match(detail,/A-00007-00000535/);
+    assert.match(detail,/Ch 111/);
+    assert.doesNotMatch(detail,/FCV-07 - 315|COB - 1/);
     await page.locator('#drawerHost [data-x].btn').click();
     await page.evaluate(month=>{S.calM=month;renderVen()},dates.yesterday.slice(0,7));
     await page.locator(`#v-ven [data-f="${dates.yesterday}"]`).click();

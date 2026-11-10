@@ -254,7 +254,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.20">v1.0.20</span>
+    <span class="app-version" aria-label="Versión 1.0.21">v1.0.21</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -494,9 +494,9 @@ function setDate(id,f){S.ovr=S.ovr||{};const raw=rawOf(id);if(f&&!(raw&&raw.f===
   if(d){const it=allMovs().filter(r=>d.ids.has(r.id));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('dch2'))setDate(t.dataset.id,t.value||null)});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
-function liHTML(r){const v=ars(r);const late=r.f<reportToday();
+function liHTML(r){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportToday();
   return `<div class="li"><div class="p" title="${esc(r.p)}">${esc(r.p)}</div><div class="m ${v<0?'neg':'pos'}">${$f(v)}</div>
-  <div class="dd">${r.id!=null?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(r.doc||r.p)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span>${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(r.doc||'')}</span><span class="chip">${esc(r.cat)}</span>${r.c&&r.c!=='ARS'?`<span class="chip">${esc(r.c)} ${nf0.format(r.m)}</span>`:''}${r.company?`<span class="chip">${esc(r.company)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
+  <div class="dd">${r.id!=null?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(number)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span>${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(number)}</span><span class="chip">${esc(r.cat)}</span>${r.c&&r.c!=='ARS'?`<span class="chip">${esc(r.c)} ${nf0.format(r.m)}</span>`:''}${r.company?`<span class="chip">${esc(r.company)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
 
 /* ---------- RESUMEN ---------- */
 function calcIdx(F,mv){
