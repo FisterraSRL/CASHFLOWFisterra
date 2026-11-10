@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.9**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.10**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -21,7 +21,7 @@ La fuente anterior **Ejecutado** se divide en **Cobros ejecutados** y **Pagos ej
 
 Al abrir esta versión, los datos de Ejecutado ya guardados se separan automáticamente por categoría, conservando mes, importes y procedencia. La carga original se mantiene como respaldo de migración en el navegador. **Presupuesto vs real** combina ambas fuentes; si para un mes solo hay cobros o solo pagos cargados, indica **Ejecutado parcial** y muestra **Sin datos** en el tipo faltante, sin calcularle un desvío ficticio contra cero.
 
-Cobros ejecutados dispone de la API `analisisCobranza` y se incluye en **Actualizar APIs**. Pagos ejecutados sigue disponible por plantilla Excel hasta configurar su API.
+Cobros ejecutados dispone de la API `analisisCobranza` y Pagos ejecutados de `AnalisisOrdenPago`. Ambas fuentes se incluyen en **Actualizar APIs**, además de conservar su carga por plantilla Excel.
 
 ### Resultados y análisis
 
@@ -29,7 +29,7 @@ La solapa **Ejecutado** presenta las dos fuentes juntas y funciona sin cargar un
 
 Muestra cobros, pagos, neto y cobertura de pagos (cobros / pagos del mismo período), evolución mensual, desglose y participación por categoría, procedencia de las cargas y detalle de los registros originales de las plantillas. El análisis identifica la categoría de mayor importe y el cambio del neto entre meses consecutivos completos. Los pagos se muestran con signo negativo; el neto es cobros menos pagos.
 
-Si falta una de las dos fuentes en algún mes seleccionado, informa que los datos son parciales y no calcula un neto o cobertura que mezcle períodos distintos. Los importes cargados siguen visibles por tipo y por mes. La carga continúa en **Datos y fuentes**; **Presupuesto vs real** conserva su comparación independiente.
+Si falta una de las dos fuentes en algún mes seleccionado o sus fechas consultadas no coinciden, informa que los datos son parciales y no calcula un neto o cobertura que mezcle períodos distintos. Las APIs conservan el rango consultado: un mes cubierto por una consulta exitosa puede tener cero movimientos sin ser una carga faltante. Los importes cargados siguen visibles por tipo y por mes. La carga continúa en **Datos y fuentes**; **Presupuesto vs real** conserva su comparación independiente.
 
 ## Estructura
 
@@ -73,7 +73,7 @@ Los cambios enviados a `main` disparan el despliegue si está activa la integrac
 
 ### Actualizar todas las APIs
 
-En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios, Cheques de terceros y Cobros ejecutados, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
+En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios, Cheques de terceros, Cobros ejecutados y Pagos ejecutados, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
 
 Las consultas se ejecutan una a continuación de otra, con un token nuevo y la fecha de hoy para cada origen. La pantalla muestra progreso y el resultado individual: actualizado, sin registros o error. Un error no detiene las demás fuentes. Las consultas vacías o fallidas conservan los datos anteriores, y los orígenes disponibles solo por Excel no se modifican. Se bloquean ejecuciones duplicadas y cambios de las cargas durante la actualización.
 
@@ -102,8 +102,9 @@ Para que un navegador nuevo pueda consultar clientes y proveedores sin volver a 
 | `FINNEGANS_CLI_FILTERS` | `{"empresa":"EMPRE01","cuenta":"DxVta","moneda":"PES"}` |
 | `FINNEGANS_PRV_FILTERS` | `{"empresa":"EMPRE01","cuenta":"2.1.1/01/01","moneda":"PES"}` |
 | `FINNEGANS_EJC_FILTERS` | `{"empresa":"EMPRE01","detallarAplicacion":"true"}` |
+| `FINNEGANS_EJP_FILTERS` | `{"empresa":"EMPRE01","fechaDesde":"2026-10-01","detallarAplicacion":"true"}` |
 
-Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para saldos/cheques; cobranza exige empresa y no tiene filtro de cuenta. No permite ampliar estos filtros desde el navegador. La fecha hasta se calcula en el servidor con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por el reporte dentro del JSON.
+Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para saldos/cheques; cobranza y pagos exigen empresa y no tienen filtro de cuenta. No permite ampliar estos filtros desde el navegador. La fecha hasta se calcula en el servidor con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por el reporte dentro del JSON.
 
 `GET /api/finnegans-config` informa si está habilitada la conexión y sus filtros; no devuelve credenciales ni tokens. **Probar conexión** valida las credenciales desde el servidor sin devolver el token. Cada consulta compartida obtiene un token nuevo desde Vercel y lo usa para consultar el reporte. No guardar las credenciales en GitHub ni en variables con prefijo público.
 
@@ -154,6 +155,16 @@ En **Ejecutado** se muestran cuentas/medios, cliente, comprobante, fecha de cobr
 La consulta real de noviembre de 2026 se reconcilió sumando los medios de cobro por cuenta y comprobando que las aplicaciones no duplican el total. Los importes y datos reales de auditoría quedan en `data/private/`, fuera de Git; las pruebas publicadas usan datos simulados.
 
 En modo compartido, `FINNEGANS_EJC_FILTERS` admite `empresa`, `fechaDesde`, `transaccionSubtipoID`, `circuitocontable`, `detallarAplicacion` y `cliente`. Sin fechaDesde, el servidor usa el inicio del mes actual. No incluye tokens ni credenciales en el navegador.
+
+### Pagos ejecutados por API
+
+La pastilla **Pagos ejecutados → Obtener por API** consulta `AnalisisOrdenPago` (respetando mayúsculas). Parámetros con prefijo `PARAMWEBREPORT_`: `FechaDesde`, `FechaHasta`, `TransaccionSubtipoID`, `CircuitoContable`, `DetallarAplicacion`, `Proveedor`, `Empresa`. Los filtros persisten por separado de cobranza. La fecha hasta es siempre hoy en Argentina, la fecha desde es editable y cada consulta obtiene un token nuevo. DetallarAplicacion es `true` por defecto.
+
+El total suma **IMPORTE de las filas OPT**, incluidos todos los medios y retenciones registrados. Las APL se conservan como detalle sin volver a sumarse. Para movimientos OPT se usa **FECHA** (o FechaPago si estuviera disponible); no se exige FECHACOBRANZA, que puede estar vacío en este reporte. En aplicaciones sin fecha explícita se vincula Empresa + Documento a los movimientos de su propia orden de pago. Solo se utiliza una fecha inequívoca de pago; nunca se usa la fecha de la factura aplicada. Fechas inválidas, fuera de rango o ambiguas rechazan la importación sin reemplazar la carga anterior.
+
+Los importes quedan como magnitudes del pagado en moneda principal (se conservan los signos de reversas); la vista los muestra como egresos. No se revalorizan con el tipo de cambio actual. Se agrupan en Proveedores, con detalle de la cuenta y medio originales para bancos, caja, retenciones y otras formas de cancelación. La solapa **Ejecutado** incluye cuentas de pago y aplicaciones identificadas como Pago o Cobro.
+
+En modo compartido se habilita con `FINNEGANS_EJP_FILTERS`, que admite `empresa`, `fechaDesde`, `transaccionSubtipoID`, `circuitocontable`, `detallarAplicacion` y `proveedor`. Solo requiere empresa como filtro de alcance; no requiere cuenta. Los datos reales de conciliación quedan fuera de Git, en `data/private/`.
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
