@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.13**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.14**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -73,7 +73,7 @@ Los cambios enviados a `main` disparan el despliegue si está activa la integrac
 
 ### Persistencia compartida por instalación
 
-Para compartir parámetros y datos entre navegadores, conectar **una base PostgreSQL propia de esta instalación** desde Vercel Storage. La integración Neon del proyecto actual creó `CASHFLOW_DATABASE_DATABASE_URL` para Production; el adaptador también admite `CASHFLOW_DATABASE_URL` o `DATABASE_URL` en otras instalaciones. Configurar además `CASHFLOW_ACCESS_KEY` como variable de proyecto con una clave aleatoria larga, distinta para cada cliente. Ambas deben estar disponibles en Production y requieren un nuevo despliegue. No poner la clave en el repositorio ni compartir una base o clave entre clientes.
+Para compartir parámetros y datos entre navegadores, conectar **una base PostgreSQL propia de esta instalación** desde Vercel Storage. La integración Neon del proyecto actual creó `CASHFLOW_DATABASE_DATABASE_URL` para Production; el adaptador también admite `CASHFLOW_DATABASE_URL` o `DATABASE_URL` en otras instalaciones. Configurar además `CASHFLOW_ACCESS_KEY` como variable de proyecto con una clave distinta para cada cliente, de al menos 13 caracteres. Una clave aleatoria larga ofrece mayor protección. Ambas variables deben estar disponibles en Production y requieren un nuevo despliegue. No poner la clave en el repositorio ni compartir una base o clave entre clientes.
 
 Con ambas variables presentes, la aplicación pide la clave al abrirse. La clave se conserva solo durante la sesión de esa pestaña; **Cerrar acceso en este navegador** la elimina. El servidor exige la misma clave para leer y guardar el estado y para usar las APIs de Finnegans. Si falta una de las dos variables, la instalación protegida no abre los datos. Sin ninguna de ellas, continúa el modo local de desarrollo.
 
@@ -99,7 +99,7 @@ En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_
 
 La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el servidor ni los logs de la aplicación.
 
-Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. En modo compartido también se cifran con AES-GCM y una clave derivada de la clave de acceso de la instalación; solo el texto cifrado se guarda en PostgreSQL y puede recuperarse en otro navegador al ingresar la clave. El token se genera nuevamente en cada consulta. Cambiar la clave de instalación requiere volver a cargar las credenciales. El cifrado no protege de código malicioso ejecutado dentro del mismo origen ni sustituye la protección del equipo y la clave.
+Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. En modo compartido también se cifran con AES-GCM y una clave derivada de la clave de acceso de la instalación; solo el texto cifrado se guarda en PostgreSQL y puede recuperarse en otro navegador al ingresar la clave. El token se genera nuevamente en cada consulta. Tras cambiar la clave de instalación, abrir primero un navegador que tenga las credenciales guardadas localmente permite volver a cifrarlas con la nueva clave; en otro caso hay que ingresarlas de nuevo. El cifrado no protege de código malicioso ejecutado dentro del mismo origen ni sustituye la protección del equipo y la clave.
 
 En modo local, las cargas también se guardan en ese navegador y no se sincronizan. En modo compartido se guardan en PostgreSQL detrás de la clave de instalación. La clave es provisoria: no identifica a usuarios individuales ni permite atribuir cambios a una persona.
 

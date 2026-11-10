@@ -63,6 +63,11 @@ test('invalid, oversized and secret-bearing payloads never reach storage',async(
 test('an incomplete deployment fails closed while local development stays available',async()=>{
   setup();delete process.env.CASHFLOW_ACCESS_KEY;
   assert.equal((await invoke(handler)).statusCode,503);
+  process.env.CASHFLOW_ACCESS_KEY='twelvechars!';
+  assert.equal((await invoke(handler)).statusCode,503);
+  process.env.CASHFLOW_ACCESS_KEY='thirteenchars!';
+  assert.equal((await invoke(handler)).statusCode,401);
+  delete process.env.CASHFLOW_ACCESS_KEY;
   delete process.env.CASHFLOW_DATABASE_DATABASE_URL;delete process.env.CASHFLOW_DATABASE_URL;delete process.env.DATABASE_URL;
   const r=await invoke(handler);assert.equal(r.statusCode,200);assert.deepEqual(r.body,{mode:'local'});
 });

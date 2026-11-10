@@ -2,7 +2,7 @@ const fs=require('node:fs'),http=require('node:http'),assert=require('node:asser
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 
 (async()=>{
-  const key='local-test-installation-key',html=fs.readFileSync('dist/cashflow.html');
+  let key='local-test-installation-key';const html=fs.readFileSync('dist/cashflow.html');
   let revision=0,payload=null,reportCalls=0,sharedConfig=false;
   const server=http.createServer(async(req,res)=>{
     const json=(status,body)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(body))};
@@ -69,6 +69,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     sharedConfig=true;
     const c=await page();await unlock(c);await c.waitForFunction(()=>WORKSPACE.mode==='ready');await c.evaluate(()=>sharedReady);
     assert.equal(await c.evaluate(()=>S.saldo),1500);assert.equal(reportCalls,0);
-    console.log(JSON.stringify({keyRequired:true,firstUseBlank:true,parametersAndDataShared:true,noAutomaticFinnegansUpdate:true,conflictPreventsOverwrite:true}));
+    const previousVault=payload.vault.data;
+    key='new-key-13-chars';
+    await b.reload();await b.waitForFunction(()=>document.body.className==='workspace-locked');
+    await unlock(b);await b.waitForFunction(()=>WORKSPACE.mode==='ready');
+    await b.waitForFunction(()=>FAPI.credsMessage.startsWith('La clave cambió:'));
+    await settled(b);
+    assert.notEqual(payload.vault.data,previousVault);
+    const d=await page();await unlock(d);await d.waitForFunction(()=>WORKSPACE.mode==='ready');await d.evaluate(()=>credentialsReady);
+    assert.equal(await d.evaluate(()=>FAPI.clientSecret),'test-client-secret');
+    console.log(JSON.stringify({keyRequired:true,firstUseBlank:true,parametersAndDataShared:true,noAutomaticFinnegansUpdate:true,conflictPreventsOverwrite:true,credentialsSurviveKeyRotation:true}));
   }finally{for(const context of opened)await context.close();await browser.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1});

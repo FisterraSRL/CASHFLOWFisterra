@@ -248,7 +248,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.13">v1.0.13</span>
+    <span class="app-version" aria-label="Versión 1.0.14">v1.0.14</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -867,7 +867,14 @@ async function syncWorkspaceCredentials(){
       await CredentialVault.save(value);
       credentialMessage('Credenciales compartidas recuperadas.');
       if(S.tab==='dat'&&$('#apiClientId')){$('#apiClientId').value=value.clientId;$('#apiClientSecret').value=value.clientSecret}
-    }catch{credentialMessage('No se pudieron abrir las credenciales compartidas. Revisá la clave de esta instalación.',true)}
+    }catch{
+      if(FAPI.clientId.trim()&&FAPI.clientSecret.trim()){
+        try{
+          WORKSPACE.vault=await sealWorkspaceCredentials({clientId:FAPI.clientId.trim(),clientSecret:FAPI.clientSecret});
+          scheduleWorkspaceSave();credentialMessage('La clave cambió: se recuperaron las credenciales de este navegador y se guardarán con la nueva clave.');
+        }catch{credentialMessage('No se pudieron cifrar las credenciales con la nueva clave. Volvé a guardarlas.',true)}
+      }else credentialMessage('La clave cambió y este navegador no tiene las credenciales anteriores. Volvé a cargarlas y guardalas.',true)
+    }
     return;
   }
   if(FAPI.clientId.trim()&&FAPI.clientSecret.trim()){
@@ -1056,7 +1063,7 @@ function apiSection(){
     <form id="finnegansForm" autocomplete="off">
       <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><div class="api-secret"><input id="apiClientId" name="client_id" type="password" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowId" aria-controls="apiClientId" aria-pressed="false">Mostrar</button></div></div>
       <div class="fld"><label for="apiClientSecret">Client_Secret</label><div class="api-secret"><input id="apiClientSecret" name="client_secret" type="password" placeholder="Ingresá tu Client_Secret" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowSecret" aria-controls="apiClientSecret" aria-pressed="false">Mostrar</button></div></div></div>
-      <p class="note">${WORKSPACE.mode==='ready'?'Client_ID y Client_Secret se cifran con la clave de esta instalación y se guardan con los datos compartidos. Podés recuperarlos en otro navegador con esa clave. Cambiar la clave requiere volver a cargar las credenciales.':'Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan cifrados en este navegador y para este dominio.'} El token se elimina al recargar; la próxima consulta obtiene uno nuevo.</p>
+      <p class="note">${WORKSPACE.mode==='ready'?'Client_ID y Client_Secret se cifran con la clave de esta instalación y se guardan con los datos compartidos. Podés recuperarlos en otro navegador con esa clave. Al cambiarla, abrí primero un navegador que ya tenga las credenciales guardadas para volver a cifrarlas.':'Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan cifrados en este navegador y para este dominio.'} El token se elimina al recargar; la próxima consulta obtiene uno nuevo.</p>
       <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Probando conexión…':'Probar conexión'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
     <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>
