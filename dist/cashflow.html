@@ -315,7 +315,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.19">v1.0.19</span>
+    <span class="app-version" aria-label="Versión 1.0.20">v1.0.20</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -565,7 +565,7 @@ function setDate(id,f){S.ovr=S.ovr||{};const raw=rawOf(id);if(f&&!(raw&&raw.f===
   if(d){const it=allMovs().filter(r=>d.ids.has(r.id));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('dch2'))setDate(t.dataset.id,t.value||null)});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
-function liHTML(r){const v=ars(r);const late=r.f<S.ref;
+function liHTML(r){const v=ars(r);const late=r.f<reportToday();
   return `<div class="li"><div class="p" title="${esc(r.p)}">${esc(r.p)}</div><div class="m ${v<0?'neg':'pos'}">${$f(v)}</div>
   <div class="dd">${r.id!=null?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(r.doc||r.p)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span>${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(r.doc||'')}</span><span class="chip">${esc(r.cat)}</span>${r.c&&r.c!=='ARS'?`<span class="chip">${esc(r.c)} ${nf0.format(r.m)}</span>`:''}${r.company?`<span class="chip">${esc(r.company)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
 
@@ -778,7 +778,7 @@ function renderFlu(){
 
 /* ---------- VENCIMIENTOS ---------- */
 function renderVen(){
-  const v=$('#v-ven');if(!S.calM)S.calM=S.ref.slice(0,7);
+  const v=$('#v-ven'),today=reportToday();if(!S.calM)S.calM=today.slice(0,7);
   const all=allMovs().filter(r=>S.calF==='all'||(S.calF==='in'?isIn(r.cat):!isIn(r.cat)));
   const byDay={};for(const r of all)(byDay[r.f]||(byDay[r.f]=[])).push(r);
   const [yy,mm]=S.calM.split('-').map(Number);const first=new Date(Date.UTC(yy,mm-1,1));const start=new Date(first);start.setUTCDate(1-((first.getUTCDay()+6)%7));
@@ -787,12 +787,12 @@ function renderVen(){
   if(days[35].slice(0,7)!==S.calM)days.length=35;
   const agg=f=>{const L=byDay[f]||[];let a=0,b=0;for(const r of L){const x=ars(r);if(isIn(r.cat))a+=x;else b+=x}return{a,b,n:L.length}};
   days.forEach(f=>{const g=agg(f);maxAbs=Math.max(maxAbs,g.a,-g.b)});
-  for(const f of days){const g=agg(f);const cls=['day',f.slice(0,7)!==S.calM?'out':'',f===S.ref?'today':'',f<S.ref?'past':'',g.n?'has':''].join(' ');
+  for(const f of days){const g=agg(f);const cls=['day',f.slice(0,7)!==S.calM?'out':'',f===today?'today':'',f<today?'past':'',g.n?'has':''].join(' ');
     cells+=`<button class="${cls}" data-f="${f}" aria-label="${fd(f)}: ${g.n} vencimientos"><span class="dn"><span>${+f.slice(8)}</span>${g.n?`<span class="note">${g.n}</span>`:''}</span>
     ${g.a?`<span class="amt pos">${g.a>0?'+':''}${tM(g.a)}</span>`:''}${g.b?`<span class="amt neg">${tM(g.b)}</span>`:''}
     <span class="bar">${g.a?`<span style="background:var(--in);width:${Math.max(4,g.a/maxAbs*50)}%"></span>`:''}${g.b?`<span style="background:var(--out);width:${Math.max(4,-g.b/maxAbs*50)}%"></span>`:''}</span></button>`}
   // agenda 14 días
-  let ag='';for(let i=0;i<14;i++){const f=addD(S.ref,i),L=(byDay[f]||[]).filter(r=>S.incChq||!chpPend(r));if(!L.length)continue;const g=agg(f);
+  let ag='';for(let i=0;i<14;i++){const f=addD(today,i),L=byDay[f]||[];if(!L.length)continue;const g=agg(f);
     L.sort((a,b)=>ars(a)-ars(b));
     ag+=`<div><div class="dh"><span>${DOW[D(f).getUTCDay()]} ${fd(f)}${i===0?' · hoy':''}</span><span><span class="pos">+${tM(g.a)}</span> · <span class="neg">${tM(g.b)}</span> M</span></div>${L.slice(0,6).map(liHTML).join('')}${L.length>6?`<button class="btn" data-f="${f}" style="margin-top:6px">Ver los ${L.length}</button>`:''}</div>`}
   const mN=MES[mm-1]+' '+yy;
@@ -800,11 +800,11 @@ function renderVen(){
    <div class="toolbar"><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="cPrev" aria-label="Mes anterior">‹</button><div class="h2" style="min-width:90px;text-align:center;text-transform:capitalize">${mN}</div><button class="btn" id="cNext" aria-label="Mes siguiente">›</button><button class="btn" id="cHoy">Hoy</button></div>
    <div class="seg" id="cF"><button data-v="all">Todo</button><button data-v="in">Cobros</button><button data-v="out">Pagos</button></div></div>
    <div class="cal">${['lun','mar','mié','jue','vie','sáb','dom'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
-   <p class="note" style="margin-top:8px">Millones de pesos. Los días anteriores al ${fd(S.ref)} con fondo rojo tienen comprobantes vencidos impagos.</p></div>
+   <p class="note" style="margin-top:8px">Millones de pesos. Los días anteriores a hoy (${fd(today)}) con fondo rojo tienen comprobantes vencidos pendientes.</p></div>
    <div class="card"><h2>Agenda de los próximos 14 días</h2><p class="sub">Pagos primero, ordenados por importe</p><div class="agenda">${ag||'<p class="note">Sin vencimientos.</p>'}</div></div></div>`;
   v.querySelectorAll('#cF button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===S.calF);b.onclick=()=>{S.calF=b.dataset.v;saveView();renderVen()}});
   const mv=n=>{const d=new Date(Date.UTC(yy,mm-1+n,1));S.calM=iso(d).slice(0,7);renderVen()};
-  $('#cPrev').onclick=()=>mv(-1);$('#cNext').onclick=()=>mv(1);$('#cHoy').onclick=()=>{S.calM=S.ref.slice(0,7);renderVen()};
+  $('#cPrev').onclick=()=>mv(-1);$('#cNext').onclick=()=>mv(1);$('#cHoy').onclick=()=>{S.calM=reportToday().slice(0,7);renderVen()};
   v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openDrawer('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[],''))}
 
 /* ---------- PRESUPUESTO ---------- */
