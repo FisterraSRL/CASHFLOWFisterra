@@ -248,7 +248,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.12">v1.0.12</span>
+    <span class="app-version" aria-label="Versión 1.0.13">v1.0.13</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -332,6 +332,7 @@ try{WORKSPACE.key=sessionStorage.getItem('cf-access-key-v1')||''}catch{}
 function storageError(message){const msg=document.querySelector('#storageMessage');if(msg){msg.hidden=false;msg.textContent=message}}
 function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage.setItem(LS,JSON.stringify({v:1,S}))}catch{localSaved=false;storageError('No se pudieron guardar los datos en este navegador. Revisá el espacio y los permisos de almacenamiento del sitio.')}
   if(WORKSPACE.mode==='ready'&&!WORKSPACE.hydrating)scheduleWorkspaceSave();return localSaved}
+function saveView(){if(WORKSPACE.mode==='local')save()}
 function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
 function workspacePayload(){
   const keys=['ref','tc','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
@@ -650,7 +651,7 @@ function renderFlu(){
   const tw=v.querySelector('.tblwrap');if(tw)tw.scrollLeft=sx;
   v.querySelectorAll('td.clk[data-cat]').forEach(td=>{const go=()=>{const o=F.rows[td.dataset.cat][td.dataset.c];openDrawer(td.dataset.cat+' · '+hdr(td.dataset.c),o.items,'')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
   v.querySelectorAll('td.clk[data-oi]').forEach(td=>{const go=()=>{const o=OK[+td.dataset.oi];openDrawer(o.p+' · '+hdr(td.dataset.c),o.o.cols[td.dataset.c].items,o.cat+' ·')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
-  v.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{const c=CK[+b.dataset.tg];S.exp[c]=b.getAttribute('aria-expanded')!=='true';save();renderFlu()});
+  v.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{const c=CK[+b.dataset.tg];S.exp[c]=b.getAttribute('aria-expanded')!=='true';saveView();renderFlu()});
   const setOvr=(pairs)=>{S.ovr=S.ovr||{};for(const[id,f]of pairs){const raw=rawOf(id);if(f&&!(raw&&raw.f===f))S.ovr[id]=f;else delete S.ovr[id]}save();renderAll()};
   const docsOf=i=>[...Object.values(OK[+i].o.cols),...Object.values(OK[+i].o.icols)].flatMap(x=>x.items);
   const setInc=(ids,on)=>{S.inc=S.inc||{};for(const id of ids){if(on)S.inc[id]=true;else delete S.inc[id]}save();renderAll()};
@@ -663,13 +664,13 @@ function renderFlu(){
   v.querySelectorAll('input.dch[data-all]').forEach(e=>e.onchange=()=>{if(e.value)setOvr(docsOf(e.dataset.all).map(r=>[r.id,e.value]))});
   v.querySelectorAll('[data-rs1]').forEach(b=>b.onclick=()=>setOvr([[b.dataset.rs1,null]]));
   v.querySelectorAll('[data-rsa]').forEach(b=>b.onclick=()=>setOvr(docsOf(b.dataset.rsa).map(r=>[r.id,null])));
-  v.querySelectorAll('[data-to]').forEach(b=>b.onclick=()=>{const k=OK[+b.dataset.to].k;S.expO[k]=!S.expO[k];save();renderFlu()});
+  v.querySelectorAll('[data-to]').forEach(b=>b.onclick=()=>{const k=OK[+b.dataset.to].k;S.expO[k]=!S.expO[k];saveView();renderFlu()});
   v.querySelectorAll('[data-ok]').forEach(i=>i.onchange=()=>setEx([OK[+i.dataset.ok].k],i.checked));
   const catKeys=ci=>{const c=CK[+ci];return Object.keys(T[c]).filter(p=>!q||nk(p).includes(q)).map(p=>c+'|'+p)};
   v.querySelectorAll('[data-on]').forEach(b=>b.onclick=()=>setEx(catKeys(b.dataset.on),true));
   v.querySelectorAll('[data-off]').forEach(b=>b.onclick=()=>setEx(catKeys(b.dataset.off),false));
   v.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{S.more[CK[+b.dataset.more]]=1;renderFlu()});
-  v.querySelectorAll('#fV button').forEach(b=>b.onclick=()=>{S.view=b.dataset.v;S.exp={};save();renderFlu()});
+  v.querySelectorAll('#fV button').forEach(b=>b.onclick=()=>{S.view=b.dataset.v;S.exp={};saveView();renderFlu()});
   if($('#fAll'))$('#fAll').onclick=()=>{S.excl=[];save();renderAll()};
   const fq=$('#fQ');let t;fq.oninput=()=>{clearTimeout(t);t=setTimeout(()=>{S.fq=fq.value;renderFlu();const n=$('#fQ');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)}}
 
@@ -699,7 +700,7 @@ function renderVen(){
    <div class="cal">${['lun','mar','mié','jue','vie','sáb','dom'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
    <p class="note" style="margin-top:8px">Millones de pesos. Los días anteriores al ${fd(S.ref)} con fondo rojo tienen comprobantes vencidos impagos.</p></div>
    <div class="card"><h2>Agenda de los próximos 14 días</h2><p class="sub">Pagos primero, ordenados por importe</p><div class="agenda">${ag||'<p class="note">Sin vencimientos.</p>'}</div></div></div>`;
-  v.querySelectorAll('#cF button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===S.calF);b.onclick=()=>{S.calF=b.dataset.v;save();renderVen()}});
+  v.querySelectorAll('#cF button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===S.calF);b.onclick=()=>{S.calF=b.dataset.v;saveView();renderVen()}});
   const mv=n=>{const d=new Date(Date.UTC(yy,mm-1+n,1));S.calM=iso(d).slice(0,7);renderVen()};
   $('#cPrev').onclick=()=>mv(-1);$('#cNext').onclick=()=>mv(1);$('#cHoy').onclick=()=>{S.calM=S.ref.slice(0,7);renderVen()};
   v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openDrawer('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[],''))}
@@ -753,7 +754,7 @@ function renderExecuted(){
    ${R.payAccounts.length?`<div class="card" style="margin-top:16px"><h2>Pagos por cuenta y medio</h2><p class="note">Incluye todos los medios registrados en las órdenes de pago, con sus retenciones. Las aplicaciones a facturas no duplican el total.</p><div class="tblwrap"><table><thead><tr><th>Cuenta</th><th>Registros</th><th>Pagado ($)</th></tr></thead><tbody>${R.payAccounts.map(r=>`<tr><td>${esc(r.cat)}</td><td>${r.count}</td><td>${$f(r.amount)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
    <div class="card" style="margin-top:16px"><details><summary>Ver registros de los reportes (${records.length})</summary><div class="tblwrap"><table><thead><tr><th>Mes</th><th>Fecha</th><th>Tipo</th><th>Cliente / tercero</th><th>Comprobante</th><th>Cuenta / medio</th><th>Categoría</th><th>Importe ($)</th></tr></thead><tbody>${records.map(r=>`<tr><td>${monthName(r.mes)}</td><td>${r.f?fd(r.f):'–'}</td><td>${r.type}</td><td>${esc(r.p||'–')}</td><td>${esc(r.doc||'–')}</td><td>${esc(r.account||'–')}</td><td>${esc(r.cat)}${r.ej?' · Ejemplo':''}</td><td>${$f(r.type==='Pago'?-r.imp:r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>
    ${R.applications.length?`<div class="card" style="margin-top:16px"><details><summary>Aplicaciones a comprobantes (${R.applications.length})</summary><p class="note">Detalle de facturas aplicadas a cobros y pagos. Estos importes no vuelven a sumarse a los totales.</p><div class="tblwrap"><table><thead><tr><th>Tipo</th><th>Fecha del movimiento</th><th>Cliente / proveedor</th><th>Cobranza / orden de pago</th><th>Documento aplicado</th><th>Importe aplicado ($)</th></tr></thead><tbody>${R.applications.map(r=>`<tr><td>${r.type}</td><td>${fd(r.f)}</td><td>${esc(r.p)}</td><td>${esc(r.doc)}</td><td>${esc(r.appliedDoc||'–')}</td><td>${$f(r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>`:''}`;
-  $('#execMonth').onchange=e=>{S.execMonth=e.target.value;save();renderExecuted()};$('#execGoDat').onclick=()=>setTab('dat');
+  $('#execMonth').onchange=e=>{S.execMonth=e.target.value;saveView();renderExecuted()};$('#execGoDat').onclick=()=>setTab('dat');
 }
 function renderPpt(){
   const v=$('#v-ppt'),P=S.data.PPTO.rows,E=[...S.data.EJC.rows,...S.data.EJP.rows];
@@ -774,7 +775,7 @@ function renderPpt(){
    <div class="fld"><label for="pptM">Mes</label><select id="pptM">${months.map(k=>`<option value="${k}"${k===m?' selected':''}>${MES[+k.slice(5)-1]} ${k.slice(0,4)}</option>`).join('')}</select></div></div>
    ${partial}<div class="tblwrap"><table><thead><tr><th>Categoría</th><th>Presupuesto</th><th>Proyectado (ERP)</th>${hasE?'<th>Ejecutado</th>':''}<th>Desvío</th><th style="text-align:left">Desvío %</th></tr></thead><tbody>${rowsH}</tbody></table></div>
    <p class="note">“Proyectado” toma los vencimientos del mes según Finnegans, más los atrasados imputados al mes de corte. Cuando el DW esté conectado, “Ejecutado” saldrá de los movimientos de tesorería reales.</p>`;
-  $('#pptM').onchange=e=>{S.pptM=e.target.value;save();renderPpt()}}
+  $('#pptM').onchange=e=>{S.pptM=e.target.value;saveView();renderPpt()}}
 
 /* ---------- DATOS ---------- */
 // Credentials use a separate encrypted browser vault; tokens remain in memory.
@@ -1215,7 +1216,7 @@ function loadExample(k){const ref=S.ref,o=[];const mAdd=(s,n,day)=>{const d=D(s)
   clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:todayISO};save()}
 
 /* ---------- shell ---------- */
-function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;save();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
+function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;saveView();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
 function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat})[S.tab]()}
 function renderAll(){

@@ -56,6 +56,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await b.getByText('Credenciales compartidas recuperadas.').waitFor();
     assert.equal(await b.locator('#apiClientId').inputValue(),'test-client-id');
     assert.equal(await b.locator('#apiClientSecret').inputValue(),'test-client-secret');
+    await b.locator('[data-t=flu]').click();await b.locator('[data-t=dat]').click();
+    await b.waitForTimeout(500);
     assert.equal(revision,firstRevision);assert.equal(reportCalls,0);
 
     await b.locator('#pSaldo').fill('1500');await b.locator('#pSaldo').dispatchEvent('change');await settled(b);
