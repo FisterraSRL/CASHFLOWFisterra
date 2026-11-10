@@ -220,7 +220,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.5">v1.0.5</span>
+    <span class="app-version" aria-label="Versión 1.0.6">v1.0.6</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -672,6 +672,7 @@ const CredentialVault=(()=>{
 const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
 let credentialsReady=Promise.resolve();
 const SHARED={enabled:false,sources:{},message:'',error:false,busy:false};
+let sharedReady=Promise.resolve();
 async function restoreSharedConnection(){
   if(location.protocol==='file:')return;
   try{
@@ -741,6 +742,32 @@ function restoreReportFilters(){
   }));
 }
 const REPORT_STATE=restoreReportFilters();
+const API_BATCH={busy:false,message:'',error:false,results:[]};
+function configuredApiSources(){return Object.keys(REPORT_FIELDS).filter(k=>!SHARED.enabled||!!SHARED.sources[k])}
+function batchSection(){
+  const sources=configuredApiSources(),blocked=API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy);
+  return `<div class="card" style="margin-bottom:16px"><div class="toolbar"><div><h2>Actualizar fuentes por API</h2><p class="note">${sources.length?'Fuentes: '+esc(sources.map(k=>SRC[k].n).join(', '))+'.':'No hay fuentes API habilitadas.'} Se usan los parámetros guardados de cada origen y un token nuevo por consulta.</p></div><button type="button" class="btn pri" id="updateAllApis"${blocked?' disabled':''}>${API_BATCH.busy?'Actualizando APIs…':'Actualizar APIs'}</button></div><div class="msg${API_BATCH.error?' err':''}" role="status" aria-live="polite">${esc(API_BATCH.message)}</div>${API_BATCH.results.length?`<ul class="note">${API_BATCH.results.map(r=>`<li><b>${esc(SRC[r.k].n)}:</b> ${esc(r.message)}</li>`).join('')}</ul>`:''}</div>`;
+}
+async function updateAllApis(){
+  if(API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy))return;
+  API_BATCH.busy=true;API_BATCH.error=false;API_BATCH.results=[];API_BATCH.message='Preparando actualización…';renderDat();
+  try{
+    await Promise.all([credentialsReady,sharedReady]);
+    const sources=configuredApiSources();
+    if(location.protocol==='file:')throw new Error('Abrí la versión web para actualizar las APIs.');
+    if(!sources.length)throw new Error('No hay fuentes API configuradas para actualizar.');
+    if(!SHARED.enabled&&(!FAPI.clientId.trim()||!FAPI.clientSecret.trim()))throw new Error('Completá Client_ID y Client_Secret antes de actualizar las APIs.');
+    API_BATCH.results=sources.map(k=>({k,status:'pending',message:'Pendiente'}));
+    for(let i=0;i<sources.length;i++){
+      const result=API_BATCH.results[i];result.status='busy';result.message='Consultando…';
+      API_BATCH.message=`Actualizando ${i+1} de ${sources.length}: ${SRC[result.k].n}.`;if(S.tab==='dat')renderDat();
+      try{const outcome=await obtainReport(result.k);result.status=outcome?.status||'error';result.message=REPORT_STATE[result.k].message||'No se pudo completar la consulta.'}catch{result.status='error';result.message='No se pudo completar la consulta. Se conservaron los datos anteriores.'}
+    }
+    const updated=API_BATCH.results.filter(r=>r.status==='updated').length,empty=API_BATCH.results.filter(r=>r.status==='empty').length,errors=API_BATCH.results.filter(r=>r.status==='error').length;
+    API_BATCH.error=errors>0;API_BATCH.message=`Actualización finalizada: ${updated} fuente(s) actualizada(s), ${empty} sin registros y ${errors} con error. Las consultas vacías o fallidas conservan los datos anteriores.`;
+  }catch(e){API_BATCH.error=true;API_BATCH.message=e.message}
+  finally{API_BATCH.busy=false;renderAll()}
+}
 function persistReportFilters(){
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([key])=>[key,REPORT_STATE[k].filters[key]||'']))]));
   try{localStorage.setItem(REPORT_FILTER_KEY,JSON.stringify({v:1,filters}));return true}catch{return false}
@@ -766,7 +793,7 @@ function reportOptions(k){
   if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p>${chequeNote}</details>`;
   const r=REPORT_STATE[k],fields=[['fecha',cheque?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
   const control=(key)=>{
-    const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy?' disabled':''}`;
+    const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy||API_BATCH.busy?' disabled':''}`;
     if(key==='mostrarSoloNoConciliados')return `<select ${attrs}><option value="false"${r.filters[key]!=='true'?' selected':''}>No</option><option value="true"${r.filters[key]==='true'?' selected':''}>Sí</option></select>`;
     const dateField=key==='fecha'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
     return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
@@ -774,7 +801,7 @@ function reportOptions(k){
   return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}</details>`;
 }
 async function obtainReport(k){
-  const state=REPORT_STATE[k];if(!state||state.busy)return;
+  const state=REPORT_STATE[k];if(!state||state.busy)return {status:'skipped'};
   const shared=SHARED.enabled&&!!SHARED.sources[k];
   const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:reportToday()};
   const dt=D(filters.fecha);
@@ -793,11 +820,12 @@ async function obtainReport(k){
       throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
     }
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
-    if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return}
+    if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return {status:'empty'}}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
     clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
-  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message}
+    return {status:'updated'};
+  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error'}}
   finally{state.busy=false;renderAll()}
 }
 function apiSection(){
@@ -849,16 +877,16 @@ async function freshFinnegansToken(){
 }
 function renderDat(){
   const v=$('#v-dat');
-  v.innerHTML=apiSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
+  v.innerHTML=apiSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
     const tot=['PPTO','EJE'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
     ${d.filters?`<div class="note">Filtros de la carga: ${esc(Object.entries(d.filters).filter(([key,value])=>key!=='fecha'&&value).map(([key,value])=>((REPORT_FIELDS[k]||[]).find(([f])=>f===key)||[key,key])[1]+': '+value).join(' · ')||'sin filtros adicionales')}</div>`:''}
     ${s.tpl?`<div><span class="note">Columnas de la plantilla:</span><br>${s.tpl.map(c=>`<code>${c}</code>`).join('')}</div>`:`<div class="note">Usá el mismo listado exportado de Finnegans. Columnas clave: ${s.req.map(c=>`<code>${c}</code>`).join('')}</div>`}
     ${reportOptions(k)}
-    <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"${REPORT_STATE[k]?.busy?' disabled':''}></label>
-    <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API"${REPORT_STATE[k]?.busy?' disabled':''}>${REPORT_STATE[k]?.busy?'Consultando…':'Obtener por API'}</button>
-    <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
+    <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"${REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}></label>
+    <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API"${REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}>${REPORT_STATE[k]?.busy?'Consultando…':'Obtener por API'}</button>
+    <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
     <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
   <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores, cheques propios y de terceros: API disponible · otras fuentes: Excel o integración pendiente</p>
@@ -881,6 +909,8 @@ function renderDat(){
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   }
   if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
+  $('#updateAllApis').onclick=updateAllApis;
+  if(API_BATCH.busy)v.querySelectorAll('#finnegansForm input,#finnegansForm button,#testSharedConnection,[data-ex],#resetAll').forEach(node=>node.disabled=true);
   v.querySelectorAll('input[type=file]').forEach(i=>i.onchange=e=>handleFile(i.dataset.k,e.target.files[0]));
   v.querySelectorAll('[data-copy-diagnostics]').forEach(button=>button.onclick=async()=>{
     const k=button.dataset.copyDiagnostics,d=REPORT_STATE[k]?.diagnostics;if(!d)return;
@@ -986,7 +1016,7 @@ if(S.data.PRV.orig==='Finnegans · API')for(const r of S.data.PRV.rows){
 }
 credentialsReady=restoreCredentials().finally(()=>{if(S.tab==='dat')renderDat()});
 setTab(S.tab);renderAll();
-restoreSharedConnection();
+sharedReady=restoreSharedConnection();
 addEventListener('focus',syncReportDates);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates()});
 setInterval(syncReportDates,60000);

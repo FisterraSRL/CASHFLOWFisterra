@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.5**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.6**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -53,6 +53,16 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. Después de editar la plantilla, regenerar `dist/cashflow.html` con `scripts/build.py` antes de subirla.
 
 ## Conexión API con Finnegans
+
+### Actualizar todas las APIs
+
+En **Datos y fuentes**, el botón **Actualizar APIs** consulta todos los orígenes habilitados desde una sola acción. En modo local actualiza Clientes, Proveedores, Cheques propios y Cheques de terceros, usando las credenciales y los parámetros guardados. En modo compartido consulta únicamente las fuentes habilitadas en Vercel.
+
+Las consultas se ejecutan una a continuación de otra, con un token nuevo y la fecha de hoy para cada origen. La pantalla muestra progreso y el resultado individual: actualizado, sin registros o error. Un error no detiene las demás fuentes. Las consultas vacías o fallidas conservan los datos anteriores, y los orígenes disponibles solo por Excel no se modifican. Se bloquean ejecuciones duplicadas y cambios de las cargas durante la actualización.
+
+La prueba de navegador `tests/browser/update-apis.cjs` verifica esta acción con respuestas simuladas, incluidos fallos parciales, resultados vacíos y configuración compartida. Requiere Playwright y Microsoft Edge; `PLAYWRIGHT_MODULE` permite indicar la ruta de instalación de Playwright.
+
+### Credenciales y conexión
 
 En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_KEY` en Finnegans). Ambos se muestran ocultos por defecto y tienen su propio botón **Mostrar / Ocultar**. **Probar conexión** permite comprobar las credenciales sin importar datos.
 
