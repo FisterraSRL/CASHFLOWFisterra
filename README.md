@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.15**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.16**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -73,6 +73,10 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. El proyecto de Fisterra conserva la versión de ejemplo. Para una instalación nueva, crear otro proyecto de Vercel conectado al mismo repositorio y definir `CASHFLOW_INSTALLATION_NAME` con el nombre del cliente. El proceso de compilación genera esa publicación con la etiqueta del cliente y sin movimientos, saldos ni tipo de cambio de Fisterra. Cada proyecto debe tener su propia base PostgreSQL y `CASHFLOW_ACCESS_KEY`. Hasta completar ambas, las APIs de esa instalación responden con error y no exponen datos. Las credenciales y filtros de Finnegans se cargan después desde **Datos y fuentes**; los reportes son los mismos para todas las instalaciones.
 
 Para regenerar el HTML local de Fisterra: `node scripts/build-deployment.cjs`. Para verificar una instalación nueva sin alterar ese archivo: definir `CASHFLOW_INSTALLATION_NAME=Nubiral` y ejecutar `node scripts/build-deployment.cjs tmp/nubiral.html`.
+
+### Varias empresas y monedas
+
+En **Datos y fuentes → Cotizaciones a pesos argentinos** se pueden guardar cotizaciones por moneda para cada instalación. USD conserva su campo superior y también aparece en esta sección; MXN, CLP, COP y cualquier código ISO de tres letras se pueden agregar. Una unidad de la moneda indicada equivale a los pesos argentinos ingresados. El reporte de Finnegans mantiene su importe original; la conversión se aplica al flujo proyectado y se actualiza al cambiar la cotización. Si un reporte trae una moneda sin cotización, la carga se detiene sin reemplazar los datos anteriores y se muestra qué cotización falta. Las fuentes de varias empresas pueden así coexistir en el mismo flujo sin convertir silenciosamente importes desconocidos. Si una organización aparece en más de una empresa, cada una se muestra por separado en el detalle del flujo.
 
 ### Persistencia compartida por instalación
 

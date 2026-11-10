@@ -27,7 +27,7 @@ test('issued cheques are expenses with their original due date, number, bank and
 test('own cheques support Excel aliases and USD without inferring due dates from status',()=>{
  const f={Razonsocial:'Tercero',Número:123,Documento:'OP-1','Fecha de vto.':'20/11/2026','Imp. moneda trans.':'2.000,50',Moneda:'USD',Estado:'Emitido',Banco:'ICBC'};
  const r=normalizeReport('CHP',[f],'2026-11-10').rows[0];assert.equal(r.m,-2000.5);assert.equal(r.c,'USD');assert.equal(r.x,'ICBC');
- for(const extra of [{FECHAVTO:'Vencido'},{FECHAVTO:undefined,Vencimiento:'20-11-2026'},{IMPMONEDATRANS:'invalid'},{MONEDA:'EUR'},{NUMERO:null,DOCUMENTO:null}])assert.throws(()=>normalizeReport('CHP',[cheque(),cheque(extra)],'2026-11-10'),/Fila 2/);
+ for(const extra of [{FECHAVTO:'Vencido'},{FECHAVTO:undefined,Vencimiento:'20-11-2026'},{IMPMONEDATRANS:'invalid'},{MONEDA:'CRIPTOMONEDA'},{NUMERO:null,DOCUMENTO:null}])assert.throws(()=>normalizeReport('CHP',[cheque(),cheque(extra)],'2026-11-10'),/Fila 2/);
  const out=normalizeReport('CHP',[cheque({IMPMONEDATRANS:0})],'2026-11-10');assert.equal(out.rows.length,0);assert.equal(out.warnings.length,1);
 });
 test('report proxy supports cheques and returns masked diagnostics on schema errors',async()=>{

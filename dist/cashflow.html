@@ -309,7 +309,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.15">v1.0.15</span>
+    <span class="app-version" aria-label="Versión 1.0.16">v1.0.16</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -380,7 +380,7 @@ const SRC={
 };
 const LS='cf-ghn-v1';
 const todayISO=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
-let S={ref:RAW.ref>todayISO?RAW.ref:todayISO,tc:RAW.tc,saldo:0,hor:90,gran:'S',incChq:false,tab:'res',calM:null,calF:'all',pptM:null,data:null};
+let S={ref:RAW.ref>todayISO?RAW.ref:todayISO,tc:RAW.tc,fx:{},saldo:0,hor:90,gran:'S',incChq:false,tab:'res',calM:null,calF:'all',pptM:null,data:null};
 function freshData(){const at=RAW.mov.length||RAW.cartera.length?RAW.ref:null;return{
   CLI:{rows:RAW.mov.filter(r=>r.s==='CLI'),orig:at?'Finnegans · Excel':null,at},
   PRV:{rows:RAW.mov.filter(r=>r.s==='PRV'),orig:at?'Finnegans · Excel':null,at},
@@ -389,6 +389,7 @@ function freshData(){const at=RAW.mov.length||RAW.cartera.length?RAW.ref:null;re
   PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJC:{rows:[]},EJP:{rows:[]}}}
 function emptyData(){return Object.fromEntries(Object.keys(freshData()).map(k=>[k,{rows:[]}]))}
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
+if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
 if(!S.data)S.data=freshData();
 // Split legacy executed imports once; keep the original snapshot as a migration backup.
 if(S.data.EJE){
@@ -406,7 +407,7 @@ function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage
 function saveView(){if(WORKSPACE.mode==='local')save()}
 function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
 function workspacePayload(){
-  const keys=['ref','tc','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
+  const keys=['ref','tc','fx','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
   return {version:1,state,filters,...(WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
@@ -457,6 +458,7 @@ async function loadWorkspace(){
     if(!result.payload){showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
     if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
     Object.assign(S,result.payload.state);
+    if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
     WORKSPACE.vault=result.payload.vault||null;
     for(const [k,filters]of Object.entries(result.payload.filters||{}))if(REPORT_STATE[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...filters};
     WORKSPACE.mode='ready';finishWorkspace();
@@ -489,7 +491,11 @@ const nf1=new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFraction
 const $f=v=>(v<0?'−':'')+'$ '+nf0.format(Math.abs(v));
 const $M=v=>{const a=Math.abs(v)/1e6;return (v<0?'−':'')+'$ '+(a>=100?nf0.format(a):nf1.format(a))+' M'};
 const tM=v=>Math.abs(v)<5e4?'–':(v<0?'−':'')+nf1.format(Math.abs(v)/1e6);
-const ars=r=>r.c==='USD'?r.m*S.tc:r.m;
+const FX_PENDING=new Set();
+const rateFor=c=>c==='ARS'?1:c==='USD'?S.tc:Number(S.fx?.[c]);
+const missingFx=rows=>[...new Set(rows.map(r=>r.c).filter(c=>c&&c!=='ARS'&&!(rateFor(c)>0)))].sort();
+const loadedMovements=()=>Object.values(S.data).flatMap(d=>d.rows||[]).filter(r=>r.c&&Number.isFinite(r.m));
+const ars=r=>r.m*rateFor(r.c||'ARS');
 const isIn=cat=>CATS_IN.includes(cat);
 
 /* ---------- movimientos ---------- */
@@ -506,11 +512,12 @@ function allMovs(){ensureIds();
   for(const k of ['CLI','CHP','PRE','LEA','ARCA'])for(const r of d[k].rows)if(k!=='CHP'||!r.conciliado)out.push(ov(r));
   out.push(...prvSplit().flow.map(ov));
   for(const r of d.CHT.rows){const f=chtFlow(ov(r));if(f)out.push(f)}
-  return out}
-function prvSplit(){const g={};for(const r of S.data.PRV.rows){const k=r.cat+'|'+r.p;(g[k]||(g[k]={t:0,L:[]}));g[k].t+=ars(r);g[k].L.push(r)}
+  const companies=new Map();for(const r of out){const key=r.cat+'|'+r.p;if(!companies.has(key))companies.set(key,new Set());companies.get(key).add(r.company||'')}
+  return out.map(r=>({...r,orgLabel:companies.get(r.cat+'|'+r.p).size>1?r.p+' · '+(r.company||'Sin empresa'):r.p}))}
+function prvSplit(){const g={};for(const r of S.data.PRV.rows){const k=r.cat+'|'+(r.company||'')+'|'+r.p;(g[k]||(g[k]={t:0,L:[]}));g[k].t+=ars(r);g[k].L.push(r)}
   const flow=[],fav=[];for(const o of Object.values(g))(o.t>0?fav:flow).push(...o.L);return{flow,fav}}
 const chpPend=r=>r.s==='CHP'&&!r.conciliado&&r.f<S.ref; // cheques emitidos vencidos sin conciliar
-function flowMovs(){const ex=new Set(S.excl||[]);return allMovs().filter(r=>(S.incChq||!chpPend(r))&&!r.inc&&!ex.has(r.cat+'|'+r.p))}
+function flowMovs(){const ex=new Set(S.excl||[]);return allMovs().filter(r=>(S.incChq||!chpPend(r))&&!r.inc&&!ex.has(r.cat+'|'+r.orgLabel)&&!ex.has(r.cat+'|'+r.p))}
 const horEnd=()=>addD(S.ref,S.hor);
 
 /* ---------- períodos ---------- */
@@ -554,7 +561,7 @@ document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classL
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
 function liHTML(r){const v=ars(r);const late=r.f<S.ref;
   return `<div class="li"><div class="p" title="${esc(r.p)}">${esc(r.p)}</div><div class="m ${v<0?'neg':'pos'}">${$f(v)}</div>
-  <div class="dd">${r.id!=null?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(r.doc||r.p)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span>${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(r.doc||'')}</span><span class="chip">${esc(r.cat)}</span>${r.c==='USD'?`<span class="chip">USD ${nf0.format(r.m)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
+  <div class="dd">${r.id!=null?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(r.doc||r.p)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span>${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(r.doc||'')}</span><span class="chip">${esc(r.cat)}</span>${r.c&&r.c!=='ARS'?`<span class="chip">${esc(r.c)} ${nf0.format(r.m)}</span>`:''}${r.company?`<span class="chip">${esc(r.company)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
 
 /* ---------- RESUMEN ---------- */
 function calcIdx(F,mv){
@@ -670,7 +677,7 @@ function drawChart(F){
 
 /* ---------- FLUJO ---------- */
 function orgTree(){const T={};for(const r of allMovs()){if(!S.incChq&&chpPend(r))continue;const b=bucket(r),v=ars(r);
-  const c=(T[r.cat]||(T[r.cat]={}));const o=(c[r.p]||(c[r.p]={t:0,it:0,n:0,ni:0,cols:{},icols:{}}));o.n++;const K=r.inc?'icols':'cols';if(r.inc){o.it+=v;o.ni++}else o.t+=v;(o[K][b]||(o[K][b]={v:0,items:[]}));o[K][b].v+=v;o[K][b].items.push(r)}return T}
+  const c=(T[r.cat]||(T[r.cat]={}));const p=r.orgLabel||r.p,o=(c[p]||(c[p]={t:0,it:0,n:0,ni:0,cols:{},icols:{}}));o.n++;const K=r.inc?'icols':'cols';if(r.inc){o.it+=v;o.ni++}else o.t+=v;(o[K][b]||(o[K][b]={v:0,items:[]}));o[K][b].v+=v;o[K][b].items.push(r)}return T}
 function renderFlu(){
   const sx=($('#v-flu .tblwrap')||{}).scrollLeft||0;
   const F=buildFlow(),v=$('#v-flu'),T=orgTree(),ex=new Set(S.excl||[]);S.exp=S.exp||{};S.more=S.more||{};S.expO=S.expO||{};
@@ -700,13 +707,13 @@ function renderFlu(){
         h+=`<tr class="doc tools"><td><div class="dw mv"><span>Mover todos al</span><input type="date" class="dch" data-all="${i}" aria-label="Nueva fecha para todos los documentos de ${esc(p)}">${anyMod?`<button class="lnk" data-rsa="${i}">Restablecer</button>`:''}${isIn(cat)?` · ${o.ni<o.n?`<button class="lnk" data-inca="${i}">Marcar todo como incobrable</button>`:''}${o.ni?`${o.ni<o.n?' · ':''}<button class="lnk" data-incq="${i}">Quitar incobrables</button>`:''}`:''}</div></td><td colspan="${F.cols.length+1}"></td></tr>`;
         for(const[c0,r]of docs){const v=ars(r);
           const ib=isIn(cat)?(r.inc?`<span class="chip incc">Incobrable</span><button class="lnk" data-inc0="${esc(r.id)}">Quitar</button>`:`<button class="lnk" data-inc1="${esc(r.id)}" title="Marcar como incobrable: se muestra pero no suma a los ingresos">Incobrable</button>`):'';
-          h+=`<tr class="doc${off?' off':''}${r.fo0?' mod':''}${r.inc?' incr':''}"><td><div class="dw"><span class="dl" title="${esc(r.doc)} · ${esc(r.x||'')}${r.c==='USD'?' · USD '+nf0.format(r.m):''}">${esc(r.doc||'Sin número')}</span><span class="dd2">${ib}${r.fo0?`<s title="Vencimiento original">${fd(r.fo0)}</s><button class="lnk" data-rs1="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button>`:(r.f<S.ref?'vencido':'')}<input type="date" class="dch" data-id="${esc(r.id)}" value="${r.f}" aria-label="Vencimiento de ${esc(r.doc||'')}"></span></div></td>${F.cols.map(c=>c===c0?(r.inc?`<td class="incv${atr(c)}">(${tM(v)})</td>`:`<td class="${atr(c).trim()}${v<0?' neg':' pos'}">${tM(v)}</td>`):`<td class="${atr(c).trim()}"></td>`).join('')}<td${r.inc?' class="incv"':''}>${r.inc?'('+tM(v)+')':tM(v)}</td></tr>`}}}
+          h+=`<tr class="doc${off?' off':''}${r.fo0?' mod':''}${r.inc?' incr':''}"><td><div class="dw"><span class="dl" title="${esc(r.doc)} · ${esc(r.x||'')}${r.c&&r.c!=='ARS'?' · '+r.c+' '+nf0.format(r.m):''}">${esc(r.doc||'Sin número')}</span><span class="dd2">${ib}${r.fo0?`<s title="Vencimiento original">${fd(r.fo0)}</s><button class="lnk" data-rs1="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button>`:(r.f<S.ref?'vencido':'')}<input type="date" class="dch" data-id="${esc(r.id)}" value="${r.f}" aria-label="Vencimiento de ${esc(r.doc||'')}"></span></div></td>${F.cols.map(c=>c===c0?(r.inc?`<td class="incv${atr(c)}">(${tM(v)})</td>`:`<td class="${atr(c).trim()}${v<0?' neg':' pos'}">${tM(v)}</td>`):`<td class="${atr(c).trim()}"></td>`).join('')}<td${r.inc?' class="incv"':''}>${r.inc?'('+tM(v)+')':tM(v)}</td></tr>`}}}
     if(show.length<match.length)h+=`<tr class="org tools"><td><button class="lnk" data-more="${ci}">Mostrar ${match.length-show.length} más</button></td><td colspan="${F.cols.length+1}"></td></tr>`;
     return h};
   const bodyIn=catsIn.map(catBlock).join(''),bodyOut=catsOut.map(catBlock).join('');
   const IM={};let incT=0,incN=0;for(const r of allMovs()){if(!r.inc)continue;const b=bucket(r),x=ars(r);(IM[b]||(IM[b]={v:0,items:[]}));IM[b].v+=x;IM[b].items.push(r);incT+=x;incN++}
   const memo=incN?`<tr class="memo"><td class="cat">Incobrables (no suman) <span class="cnt">${incN}</span></td>${F.cols.map(c=>IM[c]?`<td class="clk incv${atr(c)}" tabindex="0" data-im="${c}">(${tM(IM[c].v)})</td>`:`<td class="z${atr(c)}">–</td>`).join('')}<td class="incv">(${tM(incT)})</td></tr>`:'';
-  v.innerHTML=`<div class="toolbar"><div><div class="h2">Flujo de fondos proyectado</div><div class="note">Millones de pesos · USD convertidos a $ ${nf1.format(S.tc)} · tocá un importe para ver los comprobantes</div></div>
+  v.innerHTML=`<div class="toolbar"><div><div class="h2">Flujo de fondos proyectado</div><div class="note">Millones de pesos argentinos · monedas convertidas con las cotizaciones de Datos y fuentes · tocá un importe para ver los comprobantes</div></div>
    <div class="ftools"><div class="fld"><label>Vista</label><div class="seg" id="fV"><button data-v="res" aria-pressed="${view==='res'}">Resumida</button><button data-v="org" aria-pressed="${view==='org'}">Por organización</button></div></div>
    <div class="fld"><label for="fQ">Buscar organización</label><input id="fQ" type="search" value="${esc(S.fq||'')}" placeholder="Cliente, proveedor, banco" style="width:220px"></div>
    ${ex.size?`<div class="fld"><label>Excluidas</label><button class="btn" id="fAll">Incluir las ${ex.size}</button></div>`:''}</div></div>
@@ -1119,6 +1126,8 @@ async function obtainReport(k){
     }
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
     if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return {status:'empty'}}
+    const withoutRate=missingFx(data.rows);
+    if(withoutRate.length){withoutRate.forEach(code=>FX_PENDING.add(code));throw new Error('Faltan cotizaciones a pesos argentinos para '+withoutRate.join(', ')+'. Cargalas en Datos y fuentes y repetí la consulta; se conservaron los datos anteriores.')}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
     const extra=k==='EJC'||k==='EJP'?{applications:Array.isArray(data.applications)?data.applications:[],summary:data.summary||null,period:data.period||null}:{};
     clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings,...extra};save();
@@ -1174,9 +1183,14 @@ async function freshFinnegansToken(){
   }catch(err){FAPI.error=true;FAPI.message=err.name==='TimeoutError'||err.name==='AbortError'?'La solicitud demoró demasiado. Intentá nuevamente.':err instanceof TypeError?'No se pudo conectar. Revisá tu conexión e intentá nuevamente.':err.message;throw new Error(FAPI.message)}
   finally{FAPI.authPending--;FAPI.busy=FAPI.authPending>0;if(S.tab==='dat')renderDat()}
 }
+function fxSection(){
+  const codes=[...new Set(['USD','MXN','CLP','COP',...Object.keys(S.fx),...FX_PENDING,...loadedMovements().map(r=>r.c)])].filter(c=>/^[A-Z]{3}$/.test(c)&&c!=='ARS').sort();
+  const rows=codes.map(c=>`<div class="fld"><label for="fx-${c}">1 ${c} = pesos argentinos</label><input class="num" id="fx-${c}" data-fx="${c}" inputmode="decimal" placeholder="Ingresar cotización" value="${rateFor(c)>0?esc(String(rateFor(c)).replace('.',',')):''}"></div>`).join('');
+  return `<div class="card" style="margin-bottom:16px"><h2>Cotizaciones a pesos argentinos</h2><p class="sub">Usá la cotización actual de cada moneda. Se guarda con los datos de esta instalación y se aplica al flujo proyectado. Los importes originales siguen visibles en los comprobantes.</p><div class="report-grid">${rows}</div><div class="act"><input id="fxNewCode" maxlength="3" placeholder="Otra moneda (ej. EUR)" aria-label="Código de otra moneda" style="max-width:185px"><button type="button" class="btn" id="fxAdd">Agregar moneda</button></div><div class="msg" id="fxMessage" role="status"></div></div>`;
+}
 function renderDat(){
   const v=$('#v-dat');
-  v.innerHTML=workspaceSection()+apiSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
+  v.innerHTML=workspaceSection()+apiSection()+fxSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
     const tot=['PPTO','EJC','EJP'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
@@ -1210,6 +1224,13 @@ function renderDat(){
   if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
   if($('#workspaceSaveNow'))$('#workspaceSaveNow').onclick=()=>{WORKSPACE.dirty=true;flushWorkspaceSave()};
   if($('#workspaceSignOut'))$('#workspaceSignOut').onclick=()=>{try{sessionStorage.removeItem('cf-access-key-v1')}catch{}location.reload()};
+  v.querySelectorAll('[data-fx]').forEach(input=>input.onchange=()=>{
+    const code=input.dataset.fx,value=num(input.value);
+    if(value>0&&Number.isFinite(value)&&value<1e12){if(code==='USD')S.tc=value;else S.fx[code]=value;FX_PENDING.delete(code);save();renderAll();return}
+    if(!input.value.trim()&&!loadedMovements().some(r=>r.c===code)){if(code==='USD')S.tc=0;else delete S.fx[code];save();renderAll();return}
+    const msg=$('#fxMessage');msg.className='msg err';msg.textContent='Ingresá una cotización positiva para '+code+' antes de proyectar sus movimientos.';
+  });
+  $('#fxAdd').onclick=()=>{const code=$('#fxNewCode').value.trim().toUpperCase();if(!/^[A-Z]{3}$/.test(code)||code==='ARS'){$('#fxMessage').textContent='Ingresá un código de moneda de tres letras, distinto de ARS.';return}FX_PENDING.add(code);renderDat();$('#fx-'+code).focus()};
   $('#updateAllApis').onclick=updateAllApis;
   v.querySelectorAll('[data-exec-results]').forEach(button=>button.onclick=()=>setTab('eje'));
   if(API_BATCH.busy)v.querySelectorAll('#finnegansForm input,#finnegansForm button,#testSharedConnection,[data-ex],#resetAll').forEach(node=>node.disabled=true);
@@ -1252,7 +1273,7 @@ function toISO(v){if(v==null||v==='')return null;if(typeof v==='number'){return 
   m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')}return null}
 function toMes(v){if(typeof v==='number')return toISO(v).slice(0,7);const s=String(v).trim();let m=s.match(/^(\d{4})[-\/](\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0');m=s.match(/^(\d{1,2})[-\/](\d{4})/);if(m)return m[2]+'-'+m[1].padStart(2,'0');const i=MES.findIndex(x=>nk(s).startsWith(x));const y=s.match(/\d{4}/);if(i>=0&&y)return y[0]+'-'+String(i+1).padStart(2,'0');return null}
 const num=v=>{if(typeof v==='number')return v;if(v==null)return 0;let s=String(v).replace(/[^\d,.\-]/g,'');if(s.includes(',')&&s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else if(/^-?\d{1,3}(?:\.\d{3})+$/.test(s))s=s.replace(/\./g,'');else s=s.replace(/,/g,'');return parseFloat(s)||0};
-const isUSD=v=>/dolar|usd|u\$s/i.test(nk(v||'')+String(v||''));
+function excelCurrency(value){const v=nk(value||'ARS').replace(/ /g,'');const named={peso:'ARS',pesos:'ARS',pesosargentinos:'ARS',dolar:'USD',dolares:'USD',pesomexicano:'MXN',pesosmexicanos:'MXN',pesochileno:'CLP',pesoschilenos:'CLP',pesocolombiano:'COP',pesoscolombianos:'COP',euro:'EUR',euros:'EUR'};return named[v]||(/^[a-z]{3}$/.test(v)?v.toUpperCase():null)}
 function catOf(s){const k=nk(s);return [...CATS_IN,...CATS_OUT].find(c=>nk(c)===k)||[...CATS_IN,...CATS_OUT].find(c=>k&&(nk(c).includes(k)||k.includes(nk(c))))||null}
 function handleFile(k,file){const msg=$('#msg-'+k);if(!file)return;msg.className='msg';msg.textContent='Leyendo '+file.name+'…';
   const rd=new FileReader();rd.onload=e=>{try{
@@ -1261,19 +1282,20 @@ function handleFile(k,file){const msg=$('#msg-'+k);if(!file)return;msg.className
     const rows=raw.map(o=>{const r={};for(const[a,b]of Object.entries(o))r[nk(a)]=b;return r});
     const need=(SRC[k].req||SRC[k].tpl.map(nk)).map(nk);const miss=need.filter(c=>!(c in rows[0]));
     if(miss.length)throw new Error('Faltan columnas: '+miss.join(', ')+'. Revisá que la fila 1 tenga los encabezados.');
-    const out=parse(k,rows);clearOvr(k);S.data[k]={rows:out,orig:'Excel · '+file.name,at:todayISO};save();renderAll();
+    const out=parse(k,rows),withoutRate=missingFx(out);if(withoutRate.length){withoutRate.forEach(code=>FX_PENDING.add(code));renderDat();throw new Error('Faltan cotizaciones a pesos argentinos para '+withoutRate.join(', ')+'. Cargalas y volvé a subir el archivo.')}
+    clearOvr(k);S.data[k]={rows:out,orig:'Excel · '+file.name,at:todayISO};save();renderAll();
     const m2=$('#msg-'+k);if(m2){m2.className='msg ok';m2.textContent=out.length+' registros cargados.'}
-  }catch(err){msg.className='msg err';msg.textContent='No se pudo cargar: '+err.message}};rd.readAsArrayBuffer(file)}
+  }catch(err){const current=$('#msg-'+k)||msg;current.className='msg err';current.textContent='No se pudo cargar: '+err.message}};rd.readAsArrayBuffer(file)}
 function parse(k,R){const o=[];const ref=S.ref;
   if(k==='CLI')for(const r of R){const mora=num(r['dias de mora']);const fc=toISO(r['fecha comprobante']);if(!fc)continue;const dd=(String(r.condicionpago||'').match(/\d+/)||[30])[0];
     o.push({s:'CLI',fc,f:mora>0?addD(ref,-mora):addD(fc,+dd),m:num(r['importe ppal']),c:'ARS',p:r.cliente,doc:r.documento,cat:'Cobranza clientes',x:r.condicionpago||'',e:mora>0?'Vencido':'A vencer'})}
   if(k==='PRV'){const cm={'proveedores':'Proveedores','leasing':'Leasing','fondo fijo':'Fondo fijo'};
-    for(const r of R){const usd=isUSD(r.moneda)&&num(r['importe tran'])!==0;const m=usd?num(r['importe tran']):num(r['importe ppal']);if(!m)continue;
-      const cu=nk(r.cuenta||'');const fa=toISO(r['fecha de vencimiento actual']),fv=toISO(r['fecha vto']);o.push({s:'PRV',fc:toISO(r['fecha comprobante']),f:(fa&&fa>=ref)?fa:(fv||fa),m,c:usd?'USD':'ARS',p:r.proveedor,doc:r.documento,cat:cm[cu]||(cu.includes('socio')?'Retiros de socios':cu.includes('leasing')?'Leasing':cu?'Otras deudas':'Proveedores'),x:r.condicionpago||'',e:r.venc||''})}}
-  if(k==='CHP')for(const r of R)o.push({s:'CHP',f:toISO(r['fecha de vto']),m:-Math.abs(num(r['imp moneda trans'])),c:'ARS',p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.documento||''),cat:'Cheques emitidos',x:/galicia/i.test(r.cuenta)?'Galicia':/icbc/i.test(r.cuenta)?'ICBC':(r.banco||''),e:r.estado});
-  if(k==='CHT')for(const r of R)o.push({s:'CHT',f:toISO(r['fecha de vto']),m:num(r['imp moneda trans']),c:'ARS',p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.banco||''),cat:'Cheques en cartera',x:String(r.cuenta||'').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),e:r.estado});
-  if(k==='PRE')for(const r of R)o.push({s:'PRE',f:toISO(r['fecha vto']),m:-(Math.abs(num(r.capital))+Math.abs(num(r.interes))),c:isUSD(r.moneda)?'USD':'ARS',p:r.entidad,doc:'Préstamo '+(r.prestamo??''),cat:'Préstamos',x:'Capital '+nf0.format(num(r.capital))+' + interés '+nf0.format(num(r.interes))});
-  if(k==='LEA')for(const r of R)o.push({s:'LEA',f:toISO(r['fecha vto']),m:-Math.abs(num(r.cuota)),c:isUSD(r.moneda)?'USD':'ARS',p:r.entidad,doc:'Contrato '+(r.contrato??''),cat:'Leasing'});
+    for(const r of R){const parsed=excelCurrency(r.moneda);if(!parsed)throw new Error('Moneda no reconocida: '+r.moneda);const original=num(r['importe tran']),residual=parsed==='USD'&&!original,c=residual?'ARS':parsed,m=c==='ARS'?num(r['importe ppal']):original;if(!m)continue;
+      const cu=nk(r.cuenta||'');const fa=toISO(r['fecha de vencimiento actual']),fv=toISO(r['fecha vto']);o.push({s:'PRV',fc:toISO(r['fecha comprobante']),f:(fa&&fa>=ref)?fa:(fv||fa),m,c,p:r.proveedor,doc:r.documento,cat:cm[cu]||(cu.includes('socio')?'Retiros de socios':cu.includes('leasing')?'Leasing':cu?'Otras deudas':'Proveedores'),x:r.condicionpago||'',e:r.venc||''})}}
+  if(k==='CHP')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'CHP',f:toISO(r['fecha de vto']),m:-Math.abs(num(r['imp moneda trans'])),c,p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.documento||''),cat:'Cheques emitidos',x:/galicia/i.test(r.cuenta)?'Galicia':/icbc/i.test(r.cuenta)?'ICBC':(r.banco||''),e:r.estado})}
+  if(k==='CHT')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'CHT',f:toISO(r['fecha de vto']),m:num(r['imp moneda trans']),c,p:r.razonsocial,doc:'Ch '+(r.numero??'')+' · '+(r.banco||''),cat:'Cheques en cartera',x:String(r.cuenta||'').toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),e:r.estado})}
+  if(k==='PRE')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'PRE',f:toISO(r['fecha vto']),m:-(Math.abs(num(r.capital))+Math.abs(num(r.interes))),c,p:r.entidad,doc:'Préstamo '+(r.prestamo??''),cat:'Préstamos',x:'Capital '+nf0.format(num(r.capital))+' + interés '+nf0.format(num(r.interes))})}
+  if(k==='LEA')for(const r of R){const c=excelCurrency(r.moneda);if(!c)throw new Error('Moneda no reconocida: '+r.moneda);o.push({s:'LEA',f:toISO(r['fecha vto']),m:-Math.abs(num(r.cuota)),c,p:r.entidad,doc:'Contrato '+(r.contrato??''),cat:'Leasing'})}
   if(k==='ARCA')for(const r of R)o.push({s:'ARCA',f:toISO(r['fecha vto']),m:-Math.abs(num(r.importe)),c:'ARS',p:'ARCA · '+(r.plan??''),doc:'Cuota '+(r.cuota??''),cat:'Plan de pagos ARCA'});
   if(k==='PPTO'||k==='EJC'||k==='EJP')for(const [i,r]of R.entries()){
     const c=catOf(r.categoria),mes=toMes(r.mes);

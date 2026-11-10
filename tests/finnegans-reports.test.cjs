@@ -23,6 +23,13 @@ test('normalizes official field names, USD original amount, snapshot, and compan
  const out=normalizeReport('CLI',{data:{rows:[fixture()]}},'2026-10-15');const r=out.rows[0];
  assert.equal(r.m,100);assert.equal(r.c,'USD');assert.equal(r.f,'2026-10-01');assert.equal(r.company,'Empresa de prueba');assert.match(r.id,/^CLI-/);assert.equal(out.warnings.length,0);
 });
+test('preserves original MXN, CLP and EUR amounts for explicit conversion',()=>{
+ for(const [currency,amount] of [['MXN',226775.71],['Pesos chilenos',3623063.62],['EUR',1650]]){
+  const r=normalizeReport('CLI',[fixture({MONEDA:currency,IMPORTEMONTRAN:amount,IMPORTEMONPPAL:amount*20})],'2026-10-15').rows[0];
+  assert.equal(r.c,currency==='Pesos chilenos'?'CLP':currency);
+  assert.equal(r.m,amount);
+ }
+});
 test('supplier FechaVto takes priority over other date aliases, and signs are preserved',()=>{
  const f=fixture({PROVEEDOR:'Proveedor de prueba',ORGANIZACION:undefined,CUENTA:'PROVEEDORES',MONEDA:'Pesos',IMPORTEMONPPAL:-500,FechaVencimientoActual:'2026-10-10'});
  const r=normalizeReport('PRV',[f],'2026-10-15').rows[0];assert.equal(r.f,'2026-10-01');assert.equal(r.m,-500);assert.equal(r.cat,'Proveedores');
@@ -76,7 +83,7 @@ test('rejects partial pages and malformed response envelopes',()=>{
  assert.deepEqual(normalizeReport('CLI',{rows:[]},'2026-10-15').rows,[]);
 });
 test('invalid rows fail the whole import instead of losing part of the balance',()=>{
- for(const bad of [{FECHAVTO:'2026-02-31'},{DOCUMENTO:null},{IMPORTEMONPPAL:'not a number'},{MONEDA:'EUR'},{MONEDA:'USD',IMPORTEMONTRAN:null}]){
+ for(const bad of [{FECHAVTO:'2026-02-31'},{DOCUMENTO:null},{IMPORTEMONPPAL:'not a number'},{MONEDA:'CRIPTOMONEDA'},{MONEDA:'USD',IMPORTEMONTRAN:null}]){
   assert.throws(()=>normalizeReport('CLI',[fixture(),fixture(bad)],'2026-10-15'),/Fila 2/);
  }
 });

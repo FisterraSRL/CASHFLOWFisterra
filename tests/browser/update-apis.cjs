@@ -15,6 +15,7 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
   if(u.pathname.endsWith('ApiSituacionCheques'))return new Response(JSON.stringify([{TERCERO:'Proveedor cheque',NUMERO:'1',FECHAVENCIMIENTO:'20-11-2026',IMPORTEMONTRANSACCION:250,ESTADO:'Emitido',CONCILIADO:'No'}]));
   if(u.pathname.endsWith('analisisCobranza'))return new Response(JSON.stringify([{TIPOOP:'OPT',FECHACOBRANZA:u.searchParams.get('PARAMWEBREPORT_FechaHasta'),DOCUMENTO:'COB-1',TERCERO:'Cliente',CUENTA:'Banco de prueba',IMPORTE:1000,MONEDA:'Pesos'}]));
   if(u.pathname.endsWith('AnalisisOrdenPago'))return new Response(JSON.stringify([{TIPOOP:'OPT',FECHA:u.searchParams.get('PARAMWEBREPORT_FechaHasta'),DOCUMENTO:'OP-1',TERCERO:'Proveedor',CUENTA:'Banco de prueba',IMPORTE:500,MONEDA:'Pesos'}]));
+  if(mode==='multi'&&u.pathname.endsWith('composicionSaldoCliente'))return new Response(JSON.stringify([{ORGANIZACION:'Cliente México',DOCUMENTO:'MX-1',FECHA:'01-11-2026',FECHAVTO:'20-11-2026',MONEDA:'MXN',IMPORTEMONTRAN:100,IMPORTEMONPPAL:2000}]));
   return new Response(JSON.stringify([{ORGANIZACION:'Cliente prueba',DOCUMENTO:'FC-1',FECHA:'01-11-2026',FECHAVTO:'20-11-2026',MONEDA:'Pesos',IMPORTEMONPPAL:u.pathname.endsWith('Proveedor')?-500:1000,CUENTA:'PROVEEDORES'}]));
  };
  const server=http.createServer(async(req,res)=>{
@@ -38,6 +39,24 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
   assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRV)),prior.prv);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CHT)),prior.cht);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRE)),prior.pre);
   assert.match(await p.locator('#v-dat').innerText(),/4 fuente\(s\) actualizada\(s\), 1 sin registros y 1 con error/);assert.equal(await p.locator('#updateAllApis').isDisabled(),false);
   for(const width of [320,390,1280]){await p.setViewportSize({width,height:950});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
+  mode='multi';const previousClient=await p.evaluate(()=>JSON.stringify(S.data.CLI));
+  await p.locator('[data-api=CLI]').click();await p.waitForFunction(()=>!REPORT_STATE.CLI.busy);
+  assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CLI)),previousClient);
+  assert.match(await p.locator('#msg-CLI').innerText(),/Faltan cotizaciones.*MXN/);
+  await p.locator('#fx-MXN').fill('80');await p.locator('#fx-MXN').dispatchEvent('change');
+  await p.locator('[data-api=CLI]').click();await p.waitForFunction(()=>!REPORT_STATE.CLI.busy);
+  assert.equal(await p.evaluate(()=>S.data.CLI.rows[0].c),'MXN');
+  assert.equal(await p.evaluate(()=>ars(S.data.CLI.rows[0])),8000);
+  const separate=await p.evaluate(()=>{
+    const original=S.data.CLI.rows,prior=S.excl;
+    S.data.CLI.rows=[{s:'CLI',id:'a',cat:'Cobranza clientes',p:'Cliente compartido',company:'Empresa A',f:'2026-11-20',m:100,c:'ARS'},{s:'CLI',id:'b',cat:'Cobranza clientes',p:'Cliente compartido',company:'Empresa B',f:'2026-11-20',m:200,c:'ARS'}];
+    const names=Object.keys(orgTree()['Cobranza clientes']);S.excl=['Cobranza clientes|Cliente compartido · Empresa A'];
+    const included=flowMovs().filter(r=>r.p==='Cliente compartido').map(r=>r.company);
+    S.data.CLI.rows=original;S.excl=prior;return {names,included};
+  });
+  assert.deepEqual(separate.names,['Cliente compartido · Empresa A','Cliente compartido · Empresa B']);
+  assert.deepEqual(separate.included,['Empresa B']);
+  mode='local';
   await p.getByRole('button',{name:'Olvidar credenciales',exact:true}).click();await p.waitForFunction(()=>!FAPI.clientId);const n=calls.length;await p.getByRole('button',{name:'Actualizar APIs',exact:true}).click();await p.waitForFunction(()=>!API_BATCH.busy);assert.equal(calls.length,n);assert.match(await p.locator('#v-dat').innerText(),/Completá Client_ID y Client_Secret antes/);
   mode='shared';failSupplier=false;Object.assign(process.env,{FINNEGANS_CLIENT_ID:'server-id',FINNEGANS_CLIENT_SECRET:'server-secret',FINNEGANS_PRV_FILTERS:JSON.stringify({empresa:'E1',cuenta:'PRV'})});
   const c=await browser.newContext(),shared=await c.newPage();await shared.goto(url);await shared.evaluate(()=>sharedReady);calls.length=0;bodyCalls.length=0;serial=0;
