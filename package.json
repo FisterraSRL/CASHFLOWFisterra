@@ -1,7 +1,7 @@
 {
   "name": "cashflow-fisterra",
   "private": true,
-  "version": "1.0.11",
+  "version": "1.0.12",
   "type": "commonjs",
   "dependencies": {
     "@neondatabase/serverless": "1.2.0"

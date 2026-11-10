@@ -248,7 +248,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.11">v1.0.11</span>
+    <span class="app-version" aria-label="Versión 1.0.12">v1.0.12</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -327,7 +327,7 @@ if(S.data.EJE){
   S.legacyExecuted=legacy;delete S.data.EJE;
 }
 for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
-const WORKSPACE={mode:'checking',key:'',revision:0,updatedAt:null,timer:null,busy:false,dirty:false,started:false,hydrating:false};
+const WORKSPACE={mode:'checking',key:'',revision:0,updatedAt:null,timer:null,busy:false,dirty:false,started:false,hydrating:false,vault:null};
 try{WORKSPACE.key=sessionStorage.getItem('cf-access-key-v1')||''}catch{}
 function storageError(message){const msg=document.querySelector('#storageMessage');if(msg){msg.hidden=false;msg.textContent=message}}
 function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage.setItem(LS,JSON.stringify({v:1,S}))}catch{localSaved=false;storageError('No se pudieron guardar los datos en este navegador. Revisá el espacio y los permisos de almacenamiento del sitio.')}
@@ -337,7 +337,7 @@ function workspacePayload(){
   const keys=['ref','tc','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
-  return {version:1,state,filters};
+  return {version:1,state,filters,...(WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
 }
 function scheduleWorkspaceSave(){
   WORKSPACE.dirty=true;clearTimeout(WORKSPACE.timer);
@@ -368,7 +368,7 @@ function finishWorkspace(){
   if(WORKSPACE.started){renderAll();return}
   WORKSPACE.started=true;
   if(WORKSPACE.mode==='ready')try{localStorage.removeItem(LS);localStorage.removeItem(REPORT_FILTER_KEY)}catch{}
-  credentialsReady=restoreCredentials().finally(()=>{if(S.tab==='dat')renderDat()});
+  credentialsReady=restoreCredentials().then(syncWorkspaceCredentials).finally(()=>{if(S.tab==='dat')renderDat()});
   WORKSPACE.hydrating=true;setTab(S.tab);renderAll();WORKSPACE.hydrating=false;sharedReady=restoreSharedConnection();
 }
 async function loadWorkspace(){
@@ -385,6 +385,7 @@ async function loadWorkspace(){
     if(!result.payload){showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
     if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
     Object.assign(S,result.payload.state);
+    WORKSPACE.vault=result.payload.vault||null;
     for(const [k,filters]of Object.entries(result.payload.filters||{}))if(REPORT_STATE[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...filters};
     WORKSPACE.mode='ready';finishWorkspace();
   }catch(e){showWorkspaceGate(e?.message||'No se pudieron cargar los datos compartidos.','retry')}
@@ -835,6 +836,44 @@ const CredentialVault=(()=>{
 })();
 const FAPI={clientId:'',clientSecret:'',token:'',expiresAt:0,busy:false,message:'',error:false,timer:null,saveTimer:null,credsVersion:0,saved:false,credsMessage:'',credsError:false};
 let credentialsReady=Promise.resolve();
+const vaultEncode=bytes=>btoa(String.fromCharCode(...bytes));
+const vaultDecode=text=>Uint8Array.from(atob(text),c=>c.charCodeAt(0));
+async function vaultKey(salt){
+  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(WORKSPACE.key),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function sealWorkspaceCredentials(value){
+  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv},await vaultKey(salt),new TextEncoder().encode(JSON.stringify(value)));
+  return {v:1,mode:'set',salt:vaultEncode(salt),iv:vaultEncode(iv),data:vaultEncode(new Uint8Array(encrypted))};
+}
+async function openWorkspaceCredentials(vault){
+  const bytes=await crypto.subtle.decrypt({name:'AES-GCM',iv:vaultDecode(vault.iv)},await vaultKey(vaultDecode(vault.salt)),vaultDecode(vault.data));
+  const value=JSON.parse(new TextDecoder().decode(bytes));
+  if(typeof value.clientId!=='string'||!value.clientId.trim()||typeof value.clientSecret!=='string'||!value.clientSecret.trim())throw new Error('Credenciales compartidas inválidas');
+  return value;
+}
+async function syncWorkspaceCredentials(){
+  if(WORKSPACE.mode!=='ready')return;
+  if(WORKSPACE.vault?.mode==='removed'){
+    await CredentialVault.clear();FAPI.clientId='';FAPI.clientSecret='';FAPI.saved=false;
+    credentialMessage('Las credenciales compartidas fueron eliminadas.');return;
+  }
+  if(WORKSPACE.vault?.mode==='set'){
+    try{
+      const value=await openWorkspaceCredentials(WORKSPACE.vault);
+      FAPI.clientId=value.clientId;FAPI.clientSecret=value.clientSecret;FAPI.saved=true;
+      await CredentialVault.save(value);
+      credentialMessage('Credenciales compartidas recuperadas.');
+      if(S.tab==='dat'&&$('#apiClientId')){$('#apiClientId').value=value.clientId;$('#apiClientSecret').value=value.clientSecret}
+    }catch{credentialMessage('No se pudieron abrir las credenciales compartidas. Revisá la clave de esta instalación.',true)}
+    return;
+  }
+  if(FAPI.clientId.trim()&&FAPI.clientSecret.trim()){
+    try{WORKSPACE.vault=await sealWorkspaceCredentials({clientId:FAPI.clientId.trim(),clientSecret:FAPI.clientSecret});scheduleWorkspaceSave();credentialMessage('Credenciales anteriores preparadas para compartir.')}
+    catch{credentialMessage('No se pudieron cifrar las credenciales para compartirlas.',true)}
+  }
+}
 const SHARED={enabled:false,sources:{},message:'',error:false,busy:false};
 let sharedReady=Promise.resolve();
 async function restoreSharedConnection(){
@@ -860,7 +899,14 @@ async function persistCredentials(){
   credentialMessage('Guardando credenciales…');
   try{
     await CredentialVault.save(value);
-    if(version===FAPI.credsVersion){FAPI.saved=true;credentialMessage('Credenciales guardadas en este navegador.')}
+    if(version===FAPI.credsVersion){
+      if(WORKSPACE.mode==='ready'){
+        const sealed=await sealWorkspaceCredentials(value);
+        if(version!==FAPI.credsVersion)return false;
+        WORKSPACE.vault=sealed;scheduleWorkspaceSave();
+      }
+      FAPI.saved=true;credentialMessage(WORKSPACE.mode==='ready'?'Credenciales cifradas y guardadas para esta instalación.':'Credenciales guardadas en este navegador.');
+    }
     return true;
   }catch{if(version===FAPI.credsVersion)credentialMessage('No se pudieron guardar las credenciales. Verificá que el navegador permita almacenar datos de este sitio.',true);return false}
 }
@@ -874,7 +920,8 @@ async function forgetCredentials(){
   try{
     await CredentialVault.clear();clearTimeout(FAPI.timer);
     FAPI.clientId='';FAPI.clientSecret='';FAPI.token='';FAPI.expiresAt=0;FAPI.saved=false;FAPI.message='';FAPI.error=false;
-    credentialMessage('Credenciales eliminadas de este navegador.');if(S.tab==='dat')renderDat();
+    if(WORKSPACE.mode==='ready'){WORKSPACE.vault={v:1,mode:'removed'};scheduleWorkspaceSave()}
+    credentialMessage(WORKSPACE.mode==='ready'?'Credenciales eliminadas de esta instalación.':'Credenciales eliminadas de este navegador.');if(S.tab==='dat')renderDat();
   }catch{credentialMessage('No se pudieron eliminar las credenciales guardadas. Intentá nuevamente.',true)}
 }
 async function restoreCredentials(){
@@ -1008,7 +1055,7 @@ function apiSection(){
     <form id="finnegansForm" autocomplete="off">
       <div class="api-fields"><div class="fld"><label for="apiClientId">Client_ID</label><div class="api-secret"><input id="apiClientId" name="client_id" type="password" placeholder="Ingresá tu Client_ID" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="512" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowId" aria-controls="apiClientId" aria-pressed="false">Mostrar</button></div></div>
       <div class="fld"><label for="apiClientSecret">Client_Secret</label><div class="api-secret"><input id="apiClientSecret" name="client_secret" type="password" placeholder="Ingresá tu Client_Secret" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="4096" required${FAPI.busy?' disabled':''}><button type="button" class="btn" id="apiShowSecret" aria-controls="apiClientSecret" aria-pressed="false">Mostrar</button></div></div></div>
-      <p class="note">Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan automáticamente, cifrados en este navegador y para este dominio. No se comparten con otros navegadores ni computadoras. El token se elimina al recargar; la próxima consulta obtiene uno nuevo con las credenciales guardadas.</p>
+      <p class="note">${WORKSPACE.mode==='ready'?'Client_ID y Client_Secret se cifran con la clave de esta instalación y se guardan con los datos compartidos. Podés recuperarlos en otro navegador con esa clave. Cambiar la clave requiere volver a cargar las credenciales.':'Client_ID y Client_Secret (SECRET_KEY en Finnegans) se guardan cifrados en este navegador y para este dominio.'} El token se elimina al recargar; la próxima consulta obtiene uno nuevo.</p>
       <div class="api-actions"><button type="submit" class="btn pri"${FAPI.busy?' disabled':''}>${FAPI.busy?'Probando conexión…':'Probar conexión'}</button><button type="button" class="btn" id="apiSaveCredentials"${FAPI.busy?' disabled':''}>Guardar credenciales</button><button type="button" class="btn" id="apiForgetCredentials"${FAPI.busy?' disabled':''}>Olvidar credenciales</button>${active?'<button type="button" class="btn" id="apiDisconnect">Desconectar</button>':''}<a class="lnk" href="https://developers.finneg.com/" target="_blank" rel="noopener noreferrer">Cómo obtener las credenciales</a></div>
     </form>
     <div id="apiCredentialMessage" class="msg api-message${FAPI.credsError?' err':''}" role="status" aria-live="polite">${esc(FAPI.credsMessage)}</div>

@@ -10,6 +10,11 @@ function validPayload(payload){
   const state=payload.state,filters=payload.filters;
   if(!state||typeof state!=='object'||Array.isArray(state)||!state.data||typeof state.data!=='object'||Array.isArray(state.data))return false;
   if(!filters||typeof filters!=='object'||Array.isArray(filters))return false;
+  if(payload.vault!==undefined){
+    const vault=payload.vault;
+    if(!vault||typeof vault!=='object'||Array.isArray(vault)||vault.v!==1||!['set','removed'].includes(vault.mode))return false;
+    if(vault.mode==='set'&&(!['salt','iv','data'].every(k=>typeof vault[k]==='string'&&vault[k].length>0&&vault[k].length<10000&&/^[A-Za-z0-9+/]+={0,2}$/.test(vault[k]))))return false;
+  }
   if(Object.keys(state.data).some(k=>!SOURCES.has(k))||Object.keys(filters).some(k=>!SOURCES.has(k)))return false;
   for(const source of Object.values(state.data)){
     if(!source||typeof source!=='object'||Array.isArray(source)||!Array.isArray(source.rows)||source.rows.length>20000)return false;

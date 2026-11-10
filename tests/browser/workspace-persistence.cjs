@@ -38,6 +38,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await a.getByText('Parámetros de composición de saldos').first().click();
     await a.locator('#report-CLI-empresa').fill('EMPRE01');
     await a.locator('[data-ex=EJC]').click();await settled(a);
+    await a.locator('#apiClientId').fill('test-client-id');
+    await a.locator('#apiClientSecret').fill('test-client-secret');
+    await a.locator('#apiSaveCredentials').click();
+    await a.getByText('Credenciales cifradas y guardadas para esta instalación.').waitFor();
+    await settled(a);
+    assert.equal(payload.vault.mode,'set');
+    assert.ok(!JSON.stringify(payload).includes('test-client-secret'));
     assert.equal(payload.state.saldo,1000);assert.equal(payload.filters.CLI.empresa,'EMPRE01');assert.ok(payload.state.data.EJC.rows.length>0);
     const firstRevision=revision;
 
@@ -46,6 +53,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     assert.equal(await b.evaluate(()=>S.data.EJC.rows.length),payload.state.data.EJC.rows.length);
     await b.locator('[data-t=dat]').click();await b.getByText('Parámetros de composición de saldos').first().click();
     assert.equal(await b.locator('#report-CLI-empresa').inputValue(),'EMPRE01');
+    await b.getByText('Credenciales compartidas recuperadas.').waitFor();
+    assert.equal(await b.locator('#apiClientId').inputValue(),'test-client-id');
+    assert.equal(await b.locator('#apiClientSecret').inputValue(),'test-client-secret');
     assert.equal(revision,firstRevision);assert.equal(reportCalls,0);
 
     await b.locator('#pSaldo').fill('1500');await b.locator('#pSaldo').dispatchEvent('change');await settled(b);

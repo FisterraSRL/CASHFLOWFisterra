@@ -41,6 +41,9 @@ test('workspace persists state and parameters with revision checks',async()=>{
   r=await invoke(handler,'PUT',{revision:0,payload:state},'long-test-access-key');assert.equal(r.statusCode,409);assert.equal(writes,1);
   r=await invoke(handler,'PUT',{revision:1,payload:{...state,state:{...state.state,saldo:2000}}},'long-test-access-key');assert.equal(r.statusCode,200);assert.equal(r.body.revision,2);
   assert.equal((await invoke(handler,'GET',undefined,'long-test-access-key')).body.payload.state.saldo,2000);
+  const vaulted={...state,vault:{v:1,mode:'set',salt:'YWJj',iv:'ZGVm',data:'Z2hp'}};
+  r=await invoke(handler,'PUT',{revision:2,payload:vaulted},'long-test-access-key');assert.equal(r.statusCode,200);
+  assert.deepEqual((await invoke(handler,'GET',undefined,'long-test-access-key')).body.payload.vault,vaulted.vault);
 });
 
 test('invalid, oversized and secret-bearing payloads never reach storage',async()=>{
@@ -49,6 +52,7 @@ test('invalid, oversized and secret-bearing payloads never reach storage',async(
     {revision:0,payload:{...state,filters:{constructor:{}}}},
     {revision:0,payload:{...state,state:{...state.state,client_secret:'private'}}},
     {revision:0,payload:{...state,state:{...state.state,data:{CLI:{rows:'not rows'}}}}},
+    {revision:0,payload:{...state,vault:{v:1,mode:'set',salt:'x',iv:'y',data:'plain client_secret'}}},
     {revision:-1,payload:state}
   ])assert.equal((await invoke(handler,'PUT',next,'long-test-access-key')).statusCode,400);
   assert.equal((await invoke(handler,'PUT',{revision:0,payload:state},'long-test-access-key',{'content-length':'4000000'})).statusCode,413);

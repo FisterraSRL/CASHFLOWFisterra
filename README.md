@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.11**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.12**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -81,7 +81,7 @@ En el primer acceso se puede **importar los datos de ese navegador** o **comenza
 
 **Guardar datos** y **consultar Finnegans** son acciones distintas: los cambios que hace el usuario se guardan automáticamente, mientras que los reportes de Finnegans solo se vuelven a consultar al pulsar **Obtener por API** o **Actualizar APIs**. Abrir o recargar la página lee el último resultado guardado sin pedir un reporte nuevo.
 
-La primera prueba automatizada de esta modalidad está en `tests/workspace.test.cjs` y `tests/browser/workspace-persistence.cjs`. La base y la clave del despliegue actual ya están configuradas; falta publicar el código y comprobar la persistencia real.
+Las pruebas automatizadas de esta modalidad están en `tests/workspace.test.cjs` y `tests/browser/workspace-persistence.cjs`. La base y la clave del despliegue actual están configuradas y la persistencia se verificó con dos sesiones contra Neon.
 
 ## Conexión API con Finnegans
 
@@ -99,7 +99,7 @@ En **Datos y fuentes**, ingresar `Client_ID` y `Client_Secret` (llamado `SECRET_
 
 La función de Vercel intercambia las credenciales mediante POST a `https://api.finneg.com/api/oauth/token`, según el contrato de [Finnegans Developers](https://developers.finneg.com/). El secreto viaja en el encabezado `Authorization`, no en la URL. No se guarda en el proyecto, el servidor ni los logs de la aplicación.
 
-Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. Al volver a abrir el sitio se recuperan ambos campos; el secreto sigue oculto. Esta persistencia corresponde al navegador y al dominio utilizados: no se sincroniza entre dispositivos. El cifrado local no sustituye la seguridad del navegador y del equipo ni protege de código malicioso ejecutado dentro del mismo origen.
+Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. En modo compartido también se cifran con AES-GCM y una clave derivada de la clave de acceso de la instalación; solo el texto cifrado se guarda en PostgreSQL y puede recuperarse en otro navegador al ingresar la clave. El token se genera nuevamente en cada consulta. Cambiar la clave de instalación requiere volver a cargar las credenciales. El cifrado no protege de código malicioso ejecutado dentro del mismo origen ni sustituye la protección del equipo y la clave.
 
 En modo local, las cargas también se guardan en ese navegador y no se sincronizan. En modo compartido se guardan en PostgreSQL detrás de la clave de instalación. La clave es provisoria: no identifica a usuarios individuales ni permite atribuir cambios a una persona.
 
@@ -126,7 +126,7 @@ Con las variables configuradas, la app muestra **Conexión compartida con Finneg
 
 La conexión compartida solo debe activarse junto con `DATABASE_URL` y `CASHFLOW_ACCESS_KEY`. Sin la clave de instalación, el modo de desarrollo anterior deja sus reportes accesibles para quien conozca la URL. El botón local **Guardar credenciales** no modifica las variables de Vercel.
 
-**Olvidar credenciales** elimina las credenciales y su clave local, vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token, conservando las credenciales. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
+**Olvidar credenciales** elimina las credenciales locales y, en modo compartido, marca como eliminada la copia central; vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
 
 Cada consulta de datos solicita un token nuevo con las credenciales recuperadas, aunque exista otro token vigente. El token recién obtenido se pasa a la función del reporte, que lo agrega como parámetro `ACCESS_TOKEN` a la URL de Finnegans. Cada consulta conserva su propio token, incluso cuando se consultan dos fuentes a la vez. Si falla la autenticación, no se consulta el reporte ni se reemplazan datos.
 
