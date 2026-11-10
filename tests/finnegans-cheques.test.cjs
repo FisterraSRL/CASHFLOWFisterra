@@ -46,3 +46,23 @@ test('recognizes real ApiSituacionCheques amount and reconciliation fields',()=>
  assert.throws(()=>normalizeReport('CHP',[{...real,CONCILIADO:'Unknown'}],'2026-11-10'),/Conciliado/);
  const anonymous=normalizeReport('CHP',[{...real,TERCERO:null,BENEFICIARIO:''}],'2026-11-10');assert.equal(anonymous.rows[0].p,'Sin tercero informado');assert.equal(anonymous.rows[0].m,-6449.33);assert.equal(anonymous.warnings.length,1);
 });
+
+test('third party cheque URL fixes type 1 independently of own cheque filters',()=>{
+ const filters={fecha:'2026-11-10',tipoCheque:'0',estado:'CARTERA',organizacion:'A&B',cuenta:'VALORES',empresa:'E1',fechaVencimientoDesde:'2026-11-01',mostrarSoloNoConciliados:'true'};
+ const u=reportUrl('CHT',filters,'third.token');
+ assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'1');
+ assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaHasta'),'2026-11-10');assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'VALORES');assert.equal(u.searchParams.get('PARAMWEBREPORT_Organizacion'),'A&B');
+ assert.equal(u.searchParams.get('PARAMWEBREPORT_MostrarSoloNoConciliados'),'true');assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaVencimientoDesde'),'2026-11-01');
+ assert.equal(reportUrl('CHP',filters,'own.token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
+});
+test('third party cheques are positive receipts preserving account, bank, state and reconciliation',()=>{
+ const f={TERCERO:'Cliente de prueba',NUMERO:'345',DOCUMENTO:'REC-1',FECHAEMISION:'01-11-2026',FECHAVENCIMIENTO:'20-11-2026',IMPORTEMONTRANSACCION:1000,MONEDA:'Pesos',ESTADO:'En Cartera',CONCILIADO:'No',CUENTA:'Valores A Depositar',BANCO:'Banco de prueba'};
+ const r=normalizeReport('CHT',[f],'2026-11-10').rows[0];
+ assert.equal(r.s,'CHT');assert.match(r.id,/^CHT-/);assert.equal(r.m,1000);assert.equal(r.cat,'Cheques en cartera');assert.equal(r.f,'2026-11-20');assert.equal(r.x,'Valores A Depositar');assert.equal(r.bank,'Banco de prueba');assert.equal(r.conciliado,false);
+ const deposited=normalizeReport('CHT',[{...f,ESTADO:'Cheque Depositado'}],'2026-11-10').rows[0];assert.equal(deposited.cat,'Cheques depositados');assert.equal(deposited.e,'Cheque Depositado');
+ const settled=normalizeReport('CHT',[{...f,CONCILIADO:'Si'}],'2026-11-10').rows[0];assert.equal(settled.conciliado,true);
+ const usd=normalizeReport('CHT',[{...f,MONEDA:'USD',IMPORTEMONTRANSACCION:-25}],'2026-11-10').rows[0];assert.equal(usd.c,'USD');assert.equal(usd.m,25);
+ assert.throws(()=>normalizeReport('CHT',[{...f,ESTADO:null}],'2026-11-10'),/falta el estado/);
+ const unknown=normalizeReport('CHT',[{...f,ESTADO:'Estado futuro'}],'2026-11-10');assert.equal(unknown.rows[0].e,'Estado futuro');assert.match(unknown.warnings[0],/estado no reconocido/);
+ for(const ESTADO of ['Endosado','Descontado','Cobrado','Anulado'])assert.equal(normalizeReport('CHT',[{...f,ESTADO}],'2026-11-10').rows[0].e,ESTADO);
+});

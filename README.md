@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.4**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.5**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -95,7 +95,7 @@ Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar*
 
 ### Composición de saldos por API
 
-Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Cheques propios consulta `ApiSituacionCheques`, con `PARAMWEBREPORT_TipoCheque=0` (Propio) fijo. Las otras fuentes todavía requieren configurar su integración.
+Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Cheques propios y de terceros consultan `ApiSituacionCheques`, con `PARAMWEBREPORT_TipoCheque` fijo: `0` (Propio) y `1` (De tercero), respectivamente. Las otras fuentes todavía requieren configurar su integración.
 
 ### Cheques propios por API
 
@@ -106,6 +106,14 @@ La pastilla **Cheques propios → Parámetros de cheques propios** permite guard
 El adaptador reconoce fecha de vencimiento, tercero, número/documento, importe, moneda, estado, cuenta y banco. Reconoce los campos reales `IMPORTEMONTRANSACCION`, `FECHAVENCIMIENTO`, `FECHAEMISION`, `TERCERO` y `CONCILIADO`, verificados en la respuesta del 10/11/2026 con `TipoCheque=0`. Los importes se incorporan como egresos en **Cheques emitidos**, conservando su vencimiento. Los registros conciliados se conservan en la carga pero no generan flujo ni alertas pendientes. Si la respuesta usa campos no reconocidos, falla la carga completa y **Ver llamada y respuesta de Finnegans** permite revisar el JSON sin perder la carga anterior.
 
 En modo compartido se habilita con `FINNEGANS_CHP_FILTERS`, por ejemplo `{"empresa":"EMPRE01","cuenta":"CODIGO_CUENTA_BANCARIA","mostrarSoloNoConciliados":"false"}`. La cuenta bancaria debe ser un código real de Finnegans; no usar el código de cuenta de proveedores. Admite también `estado`, `organizacion`, `circuitocontable`, `fechaVencimientoDesde` y `fechaVencimientoHasta` como cadenas. El tipo sigue siendo siempre `0`.
+
+### Cheques de terceros por API
+
+**Cheques de terceros → Obtener por API** usa el mismo endpoint de situación de cheques, con `PARAMWEBREPORT_TipoCheque=1` fijo en el servidor, sin selector. Tiene los mismos parámetros que Cheques propios, guardados de forma independiente: Estado, Tercero, Circuito, Cuenta contable, Empresa/sucursal, fechas de vencimiento desde/hasta y Mostrar solo no conciliados. `FechaHasta` siempre es hoy en Argentina y cada consulta obtiene un token nuevo.
+
+Los importes son positivos, en su moneda original. Se conservan banco, cuenta, estado, conciliación y vencimiento. Se aplican las reglas existentes del flujo: **En Cartera** genera cobro; **Cheque Depositado** solo se proyecta si la cuenta es de valores a depositar y el vencimiento es desde el corte. Endosados, descontados, conciliados y otros estados sin disponibilidad no generan un nuevo ingreso. Los estados no reconocidos se conservan con advertencia y no se proyectan; la falta de estado o una fila inválida rechaza la importación completa.
+
+En modo compartido se habilita con `FINNEGANS_CHT_FILTERS`, por ejemplo `{"empresa":"EMPRE01","cuenta":"CODIGO_VALORES_A_DEPOSITAR","mostrarSoloNoConciliados":"false"}`. Los filtros no se heredan de cheques propios. En esta fuente el tipo es siempre `1`, aunque existiera un valor distinto guardado.
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.

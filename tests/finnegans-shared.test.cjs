@@ -63,3 +63,10 @@ test('disabled sources and invalid origins do not reach Finnegans',()=>configure
  assert.equal((await invoke(reportHandler,{shared:true,source:'constructor'})).statusCode,503);
  assert.equal((await invoke(configHandler,{},'POST',{origin:'https://other.example'})).statusCode,403);
 }));
+
+test('shared third party cheques use type 1 and server-defined filters',()=>configured(async()=>{
+ const before=process.env.FINNEGANS_CHT_FILTERS;
+ process.env.FINNEGANS_CHT_FILTERS=JSON.stringify({empresa:'E1',cuenta:'VALORES',mostrarSoloNoConciliados:'true'});
+ global.fetch=async(url)=>{const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.third.token');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'1');assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'VALORES');return new Response(JSON.stringify([{TERCERO:'Cliente',NUMERO:'1',FECHAVENCIMIENTO:'20-11-2026',IMPORTEMONTRANSACCION:1000,CUENTA:'Valores A Depositar',ESTADO:'En Cartera'}]))};
+ try{const r=await invoke(reportHandler,{source:'CHT',shared:true,filters:{tipoCheque:'0',cuenta:'OTHER'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].s,'CHT');assert.equal(r.body.rows[0].m,1000);assert.equal(r.body.rows[0].e,'En Cartera');assert.ok(!JSON.stringify(r.body).includes('server.third.token'))}finally{if(before===undefined)delete process.env.FINNEGANS_CHT_FILTERS;else process.env.FINNEGANS_CHT_FILTERS=before}
+}));
