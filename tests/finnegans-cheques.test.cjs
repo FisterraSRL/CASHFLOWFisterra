@@ -3,14 +3,14 @@ const {reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs');
 const handler=require('../api/finnegans-report.js');
 const cheque=(extra={})=>({RAZONSOCIAL:'Proveedor de prueba',NUMERO:'00123',DOCUMENTO:'OP - 10',FECHA:'01-11-2026',FECHAVTO:'20-11-2026',IMPMONEDATRANS:125000,MONEDA:'Pesos',ESTADO:'Emitido',CUENTA:'Banco Galicia',EMPRESA:'Empresa de prueba',...extra});
 
-test('own cheque URL matches the supplied contract including case and selected type',()=>{
+test('own cheque URL always fixes type 0 even if a previous saved type was 1',()=>{
  const u=reportUrl('CHP',{fecha:'2026-11-10',estado:'EMI',organizacion:'A&B',circuitocontable:'CC',cuenta:'BANK',empresa:'E1',fechaVencimientoDesde:'2020-10-31',fechaVencimientoHasta:'2026-12-31',mostrarSoloNoConciliados:'false',tipoCheque:'1'},'test.token');
  assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');
- assert.deepEqual(Object.fromEntries(u.searchParams),{ACCESS_TOKEN:'test.token',PARAMWEBREPORT_FechaHasta:'2026-11-10',PARAMWEBREPORT_TipoCheque:'1',PARAMWEBREPORT_MostrarSoloNoConciliados:'false',PARAMWEBREPORT_Estado:'EMI',PARAMWEBREPORT_Organizacion:'A&B',PARAMWEBREPORT_CircuitoContable:'CC',PARAMWEBREPORT_CuentaContable:'BANK',PARAMWEBREPORT_Empresa:'E1',PARAMWEBREPORT_FechaVencimientoDesde:'2020-10-31',PARAMWEBREPORT_FechaVencimientoHasta:'2026-12-31'});
+ assert.deepEqual(Object.fromEntries(u.searchParams),{ACCESS_TOKEN:'test.token',PARAMWEBREPORT_FechaHasta:'2026-11-10',PARAMWEBREPORT_TipoCheque:'0',PARAMWEBREPORT_MostrarSoloNoConciliados:'false',PARAMWEBREPORT_Estado:'EMI',PARAMWEBREPORT_Organizacion:'A&B',PARAMWEBREPORT_CircuitoContable:'CC',PARAMWEBREPORT_CuentaContable:'BANK',PARAMWEBREPORT_Empresa:'E1',PARAMWEBREPORT_FechaVencimientoDesde:'2020-10-31',PARAMWEBREPORT_FechaVencimientoHasta:'2026-12-31'});
  assert.equal(u.searchParams.has('PARAMWEBREPORT_fecha'),false);
  assert.equal(reportUrl('CHP',{fecha:'2026-11-10'},'token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
  assert.equal(reportUrl('CHP',{fecha:'2026-11-10',tipoCheque:'0'},'token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
- assert.throws(()=>reportUrl('CHP',{fecha:'2026-11-10',tipoCheque:'2'},'token'),/Tipo de cheque/);
+ assert.equal(reportUrl('CHP',{fecha:'2026-11-10',tipoCheque:'2'},'token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
 });
 test('own cheque optional dates are omitted, reconciliation false is explicit and true is supported',()=>{
  const f={fecha:'2026-11-10',fechaVencimientoDesde:'',fechaVencimientoHasta:''};
@@ -35,4 +35,13 @@ test('report proxy supports cheques and returns masked diagnostics on schema err
  global.fetch=async(url)=>{assert.equal(new URL(url).searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');return new Response(JSON.stringify(payload))};
  const run=async()=>{const res={setHeader(){},status(n){this.statusCode=n;return this},json(v){this.body=v;return this}};await handler({method:'POST',headers:{'content-type':'application/json'},body:{source:'CHP',access_token:'test.token',filters:{fecha:'2026-11-10'}}},res);return res};
  try{let r=await run();assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].m,-125000);assert.ok(!JSON.stringify(r.body).includes('test.token'));payload=[cheque({FECHAVTO:'invalid'})];r=await run();assert.equal(r.statusCode,422);assert.equal(r.body.diagnostics.status,200);assert.equal(r.body.diagnostics.parameters.ACCESS_TOKEN,'[OCULTO]')}finally{global.fetch=old}
+});
+
+test('recognizes real ApiSituacionCheques amount and reconciliation fields',()=>{
+ const real={TERCERO:'Proveedor de prueba',NUMERO:'96730751',DOCUMENTO:'MOVFONDOS - 1',FECHAEMISION:'06-12-2018',FECHAVENCIMIENTO:'06-01-2019',IMPORTEMONTRANSACCION:6449.33,MONEDA:'Pesos',CONCILIADO:'Si',ESTADO:'Emitido',BANCO:'Banco de prueba',CUENTA:'Cuenta bancaria'};
+ const r=normalizeReport('CHP',[real],'2026-11-10').rows[0];
+ assert.equal(r.m,-6449.33);assert.equal(r.f,'2019-01-06');assert.equal(r.conciliado,true);
+ for(const CONCILIADO of ['No',false,'0'])assert.equal(normalizeReport('CHP',[{...real,CONCILIADO}],'2026-11-10').rows[0].conciliado,false);
+ for(const CONCILIADO of ['Sí',true,1])assert.equal(normalizeReport('CHP',[{...real,CONCILIADO}],'2026-11-10').rows[0].conciliado,true);
+ assert.throws(()=>normalizeReport('CHP',[{...real,CONCILIADO:'Unknown'}],'2026-11-10'),/Conciliado/);
 });
