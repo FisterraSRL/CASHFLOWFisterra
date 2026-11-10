@@ -2,6 +2,7 @@
 const {REPORTS,reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs');
 const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
+const {authorize}=require('../lib/workspace-auth.cjs');
 
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');
@@ -9,6 +10,7 @@ module.exports=async function handler(req,res){
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Usá POST para consultar el reporte.'})}
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)throw new Error()}catch{return res.status(403).json({error:'La solicitud debe realizarse desde esta aplicación.'})}}
+  if(!authorize(req,res))return;
   if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato de la solicitud debe ser JSON.'});
   if(Number(req.headers['content-length'])>24000)return res.status(413).json({error:'La solicitud es demasiado grande.'});
   let body=req.body;

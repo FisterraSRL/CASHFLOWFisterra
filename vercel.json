@@ -1,12 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "regions": ["gru1"],
   "buildCommand": "",
-  "installCommand": "",
   "outputDirectory": "dist",
   "functions": {
     "api/finnegans-config.js": { "maxDuration": 20 },
-    "api/finnegans-report.js": { "maxDuration": 60 }
+    "api/finnegans-report.js": { "maxDuration": 60 },
+    "api/workspace.js": { "maxDuration": 20 }
   },
   "rewrites": [
     { "source": "/", "destination": "/cashflow.html" }

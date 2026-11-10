@@ -56,6 +56,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,td.clk:focus-visib
 section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radius-panel);background:#f1f2f577;box-shadow:var(--fs-shadow-panel)}
 .banner{background:var(--accent-soft);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;margin-top:12px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 #storageMessage[hidden]{display:none}
+.workspace-checking .masthead,.workspace-checking main,.workspace-checking #drawerHost,.workspace-locked .masthead,.workspace-locked main,.workspace-locked #drawerHost{display:none}
+#workspaceGate{min-height:100vh;display:grid;place-items:center;padding:24px}
+.workspace-ready #workspaceGate{display:none}
+.workspace-gate-card{width:min(480px,100%);background:var(--panel);border:var(--fs-hairline);border-radius:var(--r);box-shadow:var(--fs-shadow-panel);padding:28px}
+.workspace-gate-card h1{font-size:25px;color:var(--fs-red);margin:0 0 8px}
+.workspace-gate-card p{color:var(--ink2)}
+.workspace-gate-card input{width:100%;min-height:42px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.workspace-gate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.workspace-gate-card [hidden]{display:none}
 .chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
 .chip.ej{background:var(--warn);color:#2a1d00;border-color:transparent}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
@@ -218,12 +227,28 @@ button:disabled{cursor:not-allowed;opacity:.6}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:sl .18s ease-out}@keyframes sl{from{transform:translateX(30px);opacity:.6}}}
 </style>
 </head>
-<body>
+<body class="workspace-checking">
+<div id="workspaceGate" role="region" aria-label="Acceso a los datos compartidos">
+  <div class="workspace-gate-card">
+    <h1>Cashflow</h1>
+    <p id="workspaceGateText">Cargando los datos guardados…</p>
+    <form id="workspaceGateForm" hidden>
+      <label for="workspaceKeyInput">Clave de acceso de esta instalación</label>
+      <input id="workspaceKeyInput" type="password" autocomplete="off" required>
+      <div class="workspace-gate-actions"><button class="btn pri" type="submit">Abrir cashflow</button></div>
+    </form>
+    <div id="workspaceFirstUse" hidden>
+      <p>Esta instalación todavía no tiene datos compartidos. Elegí cómo iniciarla:</p>
+      <div class="workspace-gate-actions"><button class="btn pri" id="workspaceImport" type="button">Importar datos de este navegador</button><button class="btn" id="workspaceEmpty" type="button">Comenzar sin datos</button></div>
+    </div>
+    <div class="workspace-gate-actions"><button class="btn" id="workspaceRetry" type="button" hidden>Reintentar</button></div>
+  </div>
+</div>
 <header class="masthead">
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.10">v1.0.10</span>
+    <span class="app-version" aria-label="Versión 1.0.11">v1.0.11</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -291,6 +316,7 @@ function freshData(){return{
   CHP:{rows:RAW.mov.filter(r=>r.s==='CHP'),orig:'Finnegans · Excel',at:RAW.ref},
   CHT:{rows:RAW.cartera,orig:'Finnegans · Excel',at:RAW.ref},
   PRE:{rows:[]},LEA:{rows:[]},ARCA:{rows:[]},PPTO:{rows:[]},EJC:{rows:[]},EJP:{rows:[]}}}
+function emptyData(){return Object.fromEntries(Object.keys(freshData()).map(k=>[k,{rows:[]}]))}
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
 if(!S.data)S.data=freshData();
 // Split legacy executed imports once; keep the original snapshot as a migration backup.
@@ -301,7 +327,80 @@ if(S.data.EJE){
   S.legacyExecuted=legacy;delete S.data.EJE;
 }
 for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
-function save(){const msg=document.querySelector('#storageMessage');try{localStorage.setItem(LS,JSON.stringify({v:1,S}));if(msg)msg.hidden=true;return true}catch(e){if(msg){msg.hidden=false;msg.textContent='No se pudieron guardar los datos en este navegador. La carga sigue disponible en esta pestaña, pero puede perderse al cerrarla. Revisá el espacio y los permisos de almacenamiento del sitio.'}return false}}
+const WORKSPACE={mode:'checking',key:'',revision:0,updatedAt:null,timer:null,busy:false,dirty:false,started:false,hydrating:false};
+try{WORKSPACE.key=sessionStorage.getItem('cf-access-key-v1')||''}catch{}
+function storageError(message){const msg=document.querySelector('#storageMessage');if(msg){msg.hidden=false;msg.textContent=message}}
+function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage.setItem(LS,JSON.stringify({v:1,S}))}catch{localSaved=false;storageError('No se pudieron guardar los datos en este navegador. Revisá el espacio y los permisos de almacenamiento del sitio.')}
+  if(WORKSPACE.mode==='ready'&&!WORKSPACE.hydrating)scheduleWorkspaceSave();return localSaved}
+function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
+function workspacePayload(){
+  const keys=['ref','tc','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
+  const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
+  const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
+  return {version:1,state,filters};
+}
+function scheduleWorkspaceSave(){
+  WORKSPACE.dirty=true;clearTimeout(WORKSPACE.timer);
+  WORKSPACE.timer=setTimeout(flushWorkspaceSave,350);
+}
+async function flushWorkspaceSave(){
+  clearTimeout(WORKSPACE.timer);WORKSPACE.timer=null;
+  if(WORKSPACE.mode!=='ready'||WORKSPACE.busy||!WORKSPACE.dirty)return;
+  WORKSPACE.busy=true;WORKSPACE.dirty=false;let failed=false;
+  try{
+    const response=await fetch('/api/workspace',{method:'PUT',headers:{...workspaceHeaders(),'content-type':'application/json'},body:JSON.stringify({revision:WORKSPACE.revision,payload:workspacePayload()}),cache:'no-store',signal:AbortSignal.timeout(25000)});
+    const result=await response.json();
+    if(response.status===409){WORKSPACE.mode='conflict';storageError('Otro equipo guardó cambios antes que esta pestaña. Los cambios actuales siguen visibles aquí, pero no se enviarán al servidor. Recargá la página para ver la versión compartida.');return}
+    if(!response.ok)throw new Error(result.error||'No se pudieron guardar los datos compartidos.');
+    WORKSPACE.revision=result.revision;WORKSPACE.updatedAt=result.updatedAt;
+    if($('#workspaceSavedAt'))$('#workspaceSavedAt').textContent=new Date(result.updatedAt).toLocaleString('es-AR');
+    const msg=$('#storageMessage');if(msg&&/No se pudieron guardar los datos compartidos/.test(msg.textContent))msg.hidden=true;
+  }catch(e){failed=true;WORKSPACE.dirty=true;storageError((e?.message||'No se pudieron guardar los datos compartidos.')+' Los cambios siguen en este navegador; el próximo cambio intentará guardarlos otra vez.')}
+  finally{WORKSPACE.busy=false;if(!failed&&WORKSPACE.dirty&&WORKSPACE.mode==='ready')scheduleWorkspaceSave()}
+}
+function showWorkspaceGate(message,view){
+  document.body.className='workspace-locked';$('#workspaceGateText').textContent=message;
+  $('#workspaceGateForm').hidden=view!=='key';$('#workspaceFirstUse').hidden=view!=='first';$('#workspaceRetry').hidden=view!=='retry';
+  if(view==='key')$('#workspaceKeyInput').focus();
+}
+function finishWorkspace(){
+  document.body.className='workspace-ready';
+  if(WORKSPACE.started){renderAll();return}
+  WORKSPACE.started=true;
+  if(WORKSPACE.mode==='ready')try{localStorage.removeItem(LS);localStorage.removeItem(REPORT_FILTER_KEY)}catch{}
+  credentialsReady=restoreCredentials().finally(()=>{if(S.tab==='dat')renderDat()});
+  WORKSPACE.hydrating=true;setTab(S.tab);renderAll();WORKSPACE.hydrating=false;sharedReady=restoreSharedConnection();
+}
+async function loadWorkspace(){
+  if(location.protocol==='file:'){WORKSPACE.mode='local';finishWorkspace();return}
+  document.body.className='workspace-checking';$('#workspaceGateText').textContent='Cargando los datos guardados…';
+  try{
+    const response=await fetch('/api/workspace',{headers:workspaceHeaders(),cache:'no-store',signal:AbortSignal.timeout(12000)});
+    if(response.status===404||!response.headers.get('content-type')?.includes('application/json')){WORKSPACE.mode='local';finishWorkspace();return}
+    const result=await response.json();
+    if(response.status===401){WORKSPACE.key='';try{sessionStorage.removeItem('cf-access-key-v1')}catch{}showWorkspaceGate('Ingresá la clave para abrir los datos de esta instalación.','key');return}
+    if(!response.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos.');
+    if(result.mode==='local'){WORKSPACE.mode='local';finishWorkspace();return}
+    WORKSPACE.revision=result.revision;WORKSPACE.updatedAt=result.updatedAt;
+    if(!result.payload){showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
+    if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
+    Object.assign(S,result.payload.state);
+    for(const [k,filters]of Object.entries(result.payload.filters||{}))if(REPORT_STATE[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...filters};
+    WORKSPACE.mode='ready';finishWorkspace();
+  }catch(e){showWorkspaceGate(e?.message||'No se pudieron cargar los datos compartidos.','retry')}
+}
+async function initializeWorkspace(empty){
+  const previous=empty?JSON.stringify(S):null;
+  if(empty){S.data=emptyData();S.ovr={};S.inc={};S.excl=[];S.saldo=0;S.ref=reportToday();S.bal={}}
+  $('#workspaceImport').disabled=$('#workspaceEmpty').disabled=true;
+  $('#workspaceGateText').textContent='Guardando los datos iniciales…';
+  try{
+    const response=await fetch('/api/workspace',{method:'PUT',headers:{...workspaceHeaders(),'content-type':'application/json'},body:JSON.stringify({revision:0,payload:workspacePayload()}),cache:'no-store',signal:AbortSignal.timeout(25000)});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudieron iniciar los datos compartidos.');
+    WORKSPACE.revision=result.revision;WORKSPACE.updatedAt=result.updatedAt;save();WORKSPACE.mode='ready';finishWorkspace();
+  }catch(e){if(previous)Object.assign(S,JSON.parse(previous));showWorkspaceGate(e?.message||'No se pudieron iniciar los datos compartidos.','retry')}
+  finally{$('#workspaceImport').disabled=$('#workspaceEmpty').disabled=false}
+}
 
 /* ---------- utilidades ---------- */
 const $=s=>document.querySelector(s);
@@ -741,18 +840,17 @@ let sharedReady=Promise.resolve();
 async function restoreSharedConnection(){
   if(location.protocol==='file:')return;
   try{
-    const response=await fetch('/api/finnegans-config',{cache:'no-store',signal:AbortSignal.timeout(10000)});
+    const response=await fetch('/api/finnegans-config',{headers:workspaceHeaders(),cache:'no-store',signal:AbortSignal.timeout(10000)});
     if(!response.ok)return;const config=await response.json();
     if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
     SHARED.enabled=true;SHARED.sources=config.sources;
     for(const k of Object.keys(REPORT_FIELDS))if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
     renderAll();
-    await Promise.all(Object.keys(REPORT_FIELDS).filter(k=>config.sources[k]&&(!S.data[k].rows.length||S.data[k].orig==='Finnegans · Excel')).map(obtainReport));
   }catch{/* Local mode remains available if shared configuration cannot be reached. */}
 }
 async function testSharedConnection(){
   if(SHARED.busy)return;SHARED.busy=true;SHARED.error=false;SHARED.message='Probando conexión compartida…';renderDat();
-  try{const r=await fetch('/api/finnegans-config',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(25000)});const result=await r.json();if(!r.ok||!result.connected)throw new Error(result.error||'No se pudo verificar la conexión.');SHARED.message='Conexión compartida con Finnegans verificada.'}catch(e){SHARED.error=true;SHARED.message=e.message}finally{SHARED.busy=false;if(S.tab==='dat')renderDat()}
+  try{const r=await fetch('/api/finnegans-config',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(25000)});const result=await r.json();if(!r.ok||!result.connected)throw new Error(result.error||'No se pudo verificar la conexión.');SHARED.message='Conexión compartida con Finnegans verificada.'}catch(e){SHARED.error=true;SHARED.message=e.message}finally{SHARED.busy=false;if(S.tab==='dat')renderDat()}
 }
 function credentialMessage(message,error=false){FAPI.credsMessage=message;FAPI.credsError=error;const node=$('#apiCredentialMessage');if(node){node.textContent=message;node.className='msg api-message'+(error?' err':'')}}
 async function persistCredentials(){
@@ -837,7 +935,13 @@ async function updateAllApis(){
 }
 function persistReportFilters(){
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([key])=>[key,REPORT_STATE[k].filters[key]||'']))]));
+  if(WORKSPACE.mode==='ready'){scheduleWorkspaceSave();return true}
   try{localStorage.setItem(REPORT_FILTER_KEY,JSON.stringify({v:1,filters}));return true}catch{return false}
+}
+function workspaceSection(){
+  if(WORKSPACE.mode!=='ready')return '';
+  const when=WORKSPACE.updatedAt?new Date(WORKSPACE.updatedAt).toLocaleString('es-AR'):'recién iniciado';
+  return `<div class="card api-card"><div class="toolbar"><div><h2>Datos compartidos</h2><p class="sub">Parámetros, cargas, resultados y escenarios de esta instalación.</p></div><span class="api-status active">Conectado</span></div><p class="note">Último guardado: <span id="workspaceSavedAt">${esc(when)}</span>. Los cambios se guardan automáticamente. Finnegans solo se consulta al pulsar Obtener por API o Actualizar APIs.</p><div class="api-actions"><button type="button" class="btn" id="workspaceSaveNow">Guardar ahora</button><button type="button" class="btn" id="workspaceSignOut">Cerrar acceso en este navegador</button></div></div>`;
 }
 function syncReportDates(){document.querySelectorAll('[data-filter="fecha"]').forEach(input=>{input.value=reportToday()})}
 function reportDiagnosticsHTML(k){
@@ -865,7 +969,7 @@ function reportOptions(k){
     const dateField=key==='fecha'||key==='fechaDesde'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
     return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
   };
-  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente en este navegador. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
+  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente${WORKSPACE.mode==='ready'?' para esta instalación':' en este navegador'}. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return {status:'skipped'};
@@ -880,7 +984,7 @@ async function obtainReport(k){
     const token=shared?null:await freshFinnegansToken();
     filters.fecha=reportToday();
     state.message=k==='EJC'?'Consultando análisis de cobranza en Finnegans…':k==='EJP'?'Consultando análisis de órdenes de pago en Finnegans…':k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
-    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
+    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
     const data=await response.json().catch(()=>null);
     if(data?.diagnostics)state.diagnostics=data.diagnostics;
     if(!response.ok){
@@ -898,7 +1002,7 @@ async function obtainReport(k){
   finally{state.busy=false;renderAll()}
 }
 function apiSection(){
-  if(SHARED.enabled)return `<div class="card api-card"><h2>Conexión compartida con Finnegans</h2><p class="sub">Credenciales configuradas en Vercel · disponibles desde cualquier navegador o computadora.</p><p class="note">El servidor obtiene un token nuevo por consulta. Client_ID y Client_Secret no se envían al navegador. Los filtros compartidos se administran en Vercel. Las cargas de Excel y simulaciones siguen guardándose en cada navegador.</p><p class="note">Fuentes habilitadas: ${esc(Object.keys(SHARED.sources).map(k=>SRC[k]?.n||k).join(', ')||'ninguna; falta configurar empresa y cuenta de cada reporte en Vercel')}.</p><button type="button" class="btn pri" id="testSharedConnection"${SHARED.busy?' disabled':''}>Probar conexión</button><div class="msg${SHARED.error?' err':''}" role="status">${esc(SHARED.message)}</div></div>`;
+  if(SHARED.enabled)return `<div class="card api-card"><h2>Conexión compartida con Finnegans</h2><p class="sub">Credenciales configuradas en Vercel · disponibles desde cualquier navegador o computadora con la clave de esta instalación.</p><p class="note">El servidor obtiene un token nuevo por consulta. Client_ID y Client_Secret no se envían al navegador. Los filtros compartidos se administran en Vercel. Con almacenamiento central, las cargas de Excel y simulaciones también quedan compartidas.</p><p class="note">Fuentes habilitadas: ${esc(Object.keys(SHARED.sources).map(k=>SRC[k]?.n||k).join(', ')||'ninguna; falta configurar empresa y cuenta de cada reporte en Vercel')}.</p><button type="button" class="btn pri" id="testSharedConnection"${SHARED.busy?' disabled':''}>Probar conexión</button><div class="msg${SHARED.error?' err':''}" role="status">${esc(SHARED.message)}</div></div>`;
   const active=!!FAPI.token&&FAPI.expiresAt>Date.now();
   return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':FAPI.clientId&&FAPI.clientSecret?'Credenciales disponibles':'Sin credenciales'}</span></div>
     <form id="finnegansForm" autocomplete="off">
@@ -932,7 +1036,7 @@ async function freshFinnegansToken(){
   if(S.tab==='dat')renderDat();
   try{
     await persistCredentials();
-    const response=await fetch('/api/finnegans-token',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,cache:'no-store',signal:AbortSignal.timeout(25000)});
+    const response=await fetch('/api/finnegans-token',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:payload,cache:'no-store',signal:AbortSignal.timeout(25000)});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new Error(data&&data.error||'No se pudo obtener el token. Intentá nuevamente.');
     if(!data||typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=0)throw new Error('Finnegans devolvió una respuesta de autenticación no válida.');
@@ -946,7 +1050,7 @@ async function freshFinnegansToken(){
 }
 function renderDat(){
   const v=$('#v-dat');
-  v.innerHTML=apiSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
+  v.innerHTML=workspaceSection()+apiSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
     const tot=['PPTO','EJC','EJP'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
@@ -964,7 +1068,7 @@ function renderDat(){
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>
   <li><b>Cobros ejecutados, pagos ejecutados y saldos bancarios</b>: movimientos reales de tesorería por tipo y saldo de cada cuenta al cierre del día anterior.</li></ul>
-  <p>La conexión al datawarehouse y la actualización programada diaria siguen pendientes. Las consultas API actuales se ejecutan al seleccionar Obtener por API.</p></div>
+  <p>Las consultas a Finnegans se ejecutan solo al seleccionar Obtener por API o Actualizar APIs. La conexión al datawarehouse sigue pendiente.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   if($('#finnegansForm')){
   $('#finnegansForm').onsubmit=requestFinnegansToken;
@@ -978,6 +1082,8 @@ function renderDat(){
   if($('#apiDisconnect'))$('#apiDisconnect').onclick=()=>{clearTimeout(FAPI.timer);FAPI.token='';FAPI.expiresAt=0;FAPI.message='Token eliminado de esta sesión.';FAPI.error=false;renderDat()};
   }
   if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
+  if($('#workspaceSaveNow'))$('#workspaceSaveNow').onclick=()=>{WORKSPACE.dirty=true;flushWorkspaceSave()};
+  if($('#workspaceSignOut'))$('#workspaceSignOut').onclick=()=>{try{sessionStorage.removeItem('cf-access-key-v1')}catch{}location.reload()};
   $('#updateAllApis').onclick=updateAllApis;
   v.querySelectorAll('[data-exec-results]').forEach(button=>button.onclick=()=>setTab('eje'));
   if(API_BATCH.busy)v.querySelectorAll('#finnegansForm input,#finnegansForm button,#testSharedConnection,[data-ex],#resetAll').forEach(node=>node.disabled=true);
@@ -1011,7 +1117,7 @@ function renderDat(){
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});
   v.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=SRC[b.dataset.copy].tpl.join('\t');const m=$('#msg-'+b.dataset.copy);
     navigator.clipboard.writeText(t).then(()=>{m.className='msg ok';m.textContent='Encabezados copiados. Pegalos en la fila 1 de una hoja de Excel.'},()=>{m.className='msg';m.textContent=t})});
-  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=freshData();delete S.legacyExecuted;S.ovr={};S.inc={};save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
+  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=WORKSPACE.mode==='ready'?emptyData():freshData();delete S.legacyExecuted;S.ovr={};S.inc={};S.excl=[];save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
 
 /* ---------- carga de Excel ---------- */
 const nk=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -1019,7 +1125,7 @@ function toISO(v){if(v==null||v==='')return null;if(typeof v==='number'){return 
   const s=String(v).trim();let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[1]+'-'+m[2]+'-'+m[3];
   m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);if(m){const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')}return null}
 function toMes(v){if(typeof v==='number')return toISO(v).slice(0,7);const s=String(v).trim();let m=s.match(/^(\d{4})[-\/](\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0');m=s.match(/^(\d{1,2})[-\/](\d{4})/);if(m)return m[2]+'-'+m[1].padStart(2,'0');const i=MES.findIndex(x=>nk(s).startsWith(x));const y=s.match(/\d{4}/);if(i>=0&&y)return y[0]+'-'+String(i+1).padStart(2,'0');return null}
-const num=v=>{if(typeof v==='number')return v;if(v==null)return 0;let s=String(v).replace(/[^\d,.\-]/g,'');if(s.includes(',')&&s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s)||0};
+const num=v=>{if(typeof v==='number')return v;if(v==null)return 0;let s=String(v).replace(/[^\d,.\-]/g,'');if(s.includes(',')&&s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else if(/^-?\d{1,3}(?:\.\d{3})+$/.test(s))s=s.replace(/\./g,'');else s=s.replace(/,/g,'');return parseFloat(s)||0};
 const isUSD=v=>/dolar|usd|u\$s/i.test(nk(v||'')+String(v||''));
 function catOf(s){const k=nk(s);return [...CATS_IN,...CATS_OUT].find(c=>nk(c)===k)||[...CATS_IN,...CATS_OUT].find(c=>k&&(nk(c).includes(k)||k.includes(nk(c))))||null}
 function handleFile(k,file){const msg=$('#msg-'+k);if(!file)return;msg.className='msg';msg.textContent='Leyendo '+file.name+'…';
@@ -1091,11 +1197,13 @@ if(S.data.PRV.orig==='Finnegans · API')for(const r of S.data.PRV.rows){
     if((S.excl||[]).includes(oldKey)&&!S.excl.includes(r.cat+'|'+r.p))S.excl.push(r.cat+'|'+r.p);
   }
 }
-credentialsReady=restoreCredentials().finally(()=>{if(S.tab==='dat')renderDat()});
-setTab(S.tab);renderAll();
-sharedReady=restoreSharedConnection();
+$('#workspaceGateForm').onsubmit=e=>{e.preventDefault();WORKSPACE.key=$('#workspaceKeyInput').value.trim();try{sessionStorage.setItem('cf-access-key-v1',WORKSPACE.key)}catch{}loadWorkspace()};
+$('#workspaceImport').onclick=()=>initializeWorkspace(false);
+$('#workspaceEmpty').onclick=()=>initializeWorkspace(true);
+$('#workspaceRetry').onclick=loadWorkspace;
+loadWorkspace();
 addEventListener('focus',syncReportDates);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates();else if(WORKSPACE.mode==='ready')flushWorkspaceSave()});
 setInterval(syncReportDates,60000);
 </script>
 </body>

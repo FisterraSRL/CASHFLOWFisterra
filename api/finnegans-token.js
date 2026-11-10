@@ -1,4 +1,5 @@
 'use strict';
+const {authorize}=require('../lib/workspace-auth.cjs');
 
 // Official contract: https://developers.finneg.com/ (POST + literal Basic SECRET_KEY).
 // Never persist credentials, echo upstream errors, or put secrets in query strings.
@@ -19,6 +20,7 @@ module.exports = async function handler(req, res) {
       return res.status(403).json({error: 'La solicitud debe realizarse desde esta aplicación.'});
     }
   }
+  if(!authorize(req,res))return;
   if ((req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
     return res.status(415).json({error: 'El formato de la solicitud debe ser JSON.'});
   }

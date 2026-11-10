@@ -1,10 +1,12 @@
 # Cashflow Fisterra
 
-Versión **1.0.10**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.11**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
-La app es un único archivo HTML, sin servidor: se abre en cualquier navegador.
+La evolución hacia una instalación comercial independiente por cliente está detallada en [docs/plan-comercializacion.md](docs/plan-comercializacion.md). La versión actual sigue siendo de desarrollo: la clave compartida, el respaldo y el aislamiento operativo deben evolucionar antes de usarla con clientes externos.
+
+El frontend se genera como un único HTML. Las consultas a Finnegans y, cuando se configura, el almacenamiento compartido usan funciones de servidor en Vercel. El archivo local conserva la carga Excel sin conexión API.
 
 ## Qué incluye
 
@@ -63,11 +65,23 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 
 - Carpeta raíz del proyecto: la raíz del repositorio.
 - Carpeta publicada: `dist`.
-- Sin instalación de dependencias ni compilación del frontend: el HTML generado ya está versionado.
+- Vercel instala la dependencia PostgreSQL declarada en `package.json`; el HTML generado ya está versionado.
 - La ruta `/` sirve `dist/cashflow.html`.
 - Vercel también publica la función Node.js `api/finnegans-token.js` para autenticar con Finnegans.
 
 Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. Después de editar la plantilla, regenerar `dist/cashflow.html` con `scripts/build.py` antes de subirla.
+
+### Persistencia compartida por instalación
+
+Para compartir parámetros y datos entre navegadores, conectar **una base PostgreSQL propia de esta instalación** desde Vercel Storage. La integración Neon del proyecto actual creó `CASHFLOW_DATABASE_DATABASE_URL` para Production; el adaptador también admite `CASHFLOW_DATABASE_URL` o `DATABASE_URL` en otras instalaciones. Configurar además `CASHFLOW_ACCESS_KEY` como variable de proyecto con una clave aleatoria larga, distinta para cada cliente. Ambas deben estar disponibles en Production y requieren un nuevo despliegue. No poner la clave en el repositorio ni compartir una base o clave entre clientes.
+
+Con ambas variables presentes, la aplicación pide la clave al abrirse. La clave se conserva solo durante la sesión de esa pestaña; **Cerrar acceso en este navegador** la elimina. El servidor exige la misma clave para leer y guardar el estado y para usar las APIs de Finnegans. Si falta una de las dos variables, la instalación protegida no abre los datos. Sin ninguna de ellas, continúa el modo local de desarrollo.
+
+En el primer acceso se puede **importar los datos de ese navegador** o **comenzar sin datos**. La segunda opción no carga los ejemplos del HTML. A partir de ahí se guardan centralmente saldo, fecha de corte, tipo de cambio, horizonte, filtros de reportes, cargas Excel, resultados API y cambios del escenario. El navegador deja de conservar una copia local sin cifrar del estado compartido. Una actualización fallida muestra un error y no reemplaza la última versión guardada; dos pestañas con versiones distintas no pueden sobrescribirse silenciosamente.
+
+**Guardar datos** y **consultar Finnegans** son acciones distintas: los cambios que hace el usuario se guardan automáticamente, mientras que los reportes de Finnegans solo se vuelven a consultar al pulsar **Obtener por API** o **Actualizar APIs**. Abrir o recargar la página lee el último resultado guardado sin pedir un reporte nuevo.
+
+La primera prueba automatizada de esta modalidad está en `tests/workspace.test.cjs` y `tests/browser/workspace-persistence.cjs`. La base y la clave del despliegue actual ya están configuradas; falta publicar el código y comprobar la persistencia real.
 
 ## Conexión API con Finnegans
 
@@ -87,7 +101,7 @@ La función de Vercel intercambia las credenciales mediante POST a `https://api.
 
 Las credenciales se guardan automáticamente en el navegador y también mediante **Guardar credenciales**. Se cifran con AES-GCM en IndexedDB, con una clave local no exportable. Al volver a abrir el sitio se recuperan ambos campos; el secreto sigue oculto. Esta persistencia corresponde al navegador y al dominio utilizados: no se sincroniza entre dispositivos. El cifrado local no sustituye la seguridad del navegador y del equipo ni protege de código malicioso ejecutado dentro del mismo origen.
 
-Las cargas de clientes, proveedores y demás fuentes también se guardan en ese navegador. Publicar en Vercel no las convierte en datos compartidos: otro navegador o computadora tiene su almacenamiento propio. No hay una base central de cargas ni inicio de sesión. Los fallos al guardar cargas se muestran en una alerta visible.
+En modo local, las cargas también se guardan en ese navegador y no se sincronizan. En modo compartido se guardan en PostgreSQL detrás de la clave de instalación. La clave es provisoria: no identifica a usuarios individuales ni permite atribuir cambios a una persona.
 
 Las cuentas API como `Proveedores en Cta. Cte.` se muestran en la categoría **Proveedores**. Las cargas API anteriores con esa cuenta se reclasifican al abrir la versión 1.0.1, conservando documentos, fechas y escenarios.
 
@@ -108,9 +122,9 @@ Los filtros de ejemplo corresponden a los códigos usados en la instalación act
 
 `GET /api/finnegans-config` informa si está habilitada la conexión y sus filtros; no devuelve credenciales ni tokens. **Probar conexión** valida las credenciales desde el servidor sin devolver el token. Cada consulta compartida obtiene un token nuevo desde Vercel y lo usa para consultar el reporte. No guardar las credenciales en GitHub ni en variables con prefijo público.
 
-Con las variables configuradas, la app muestra **Conexión compartida con Finnegans** y carga automáticamente las fuentes habilitadas en navegadores sin cargas propias. Las credenciales locales existentes se conservan, pero no son necesarias para las fuentes compartidas. Sin esas variables, se mantiene el modo local anterior.
+Con las variables configuradas, la app muestra **Conexión compartida con Finnegans**. Las credenciales locales existentes se conservan, pero no son necesarias para las fuentes compartidas. Los reportes se consultan únicamente cuando el usuario pulsa el botón correspondiente. Sin esas variables, se mantiene la conexión local anterior.
 
-Esta modalidad no tiene login: cualquier persona con acceso a la URL puede consultar los reportes habilitados. Los datos se vuelven a obtener desde Finnegans; las cargas de Excel, exclusiones y reprogramaciones no se sincronizan entre computadoras. El botón local **Guardar credenciales** no modifica las variables de Vercel.
+La conexión compartida solo debe activarse junto con `DATABASE_URL` y `CASHFLOW_ACCESS_KEY`. Sin la clave de instalación, el modo de desarrollo anterior deja sus reportes accesibles para quien conozca la URL. El botón local **Guardar credenciales** no modifica las variables de Vercel.
 
 **Olvidar credenciales** elimina las credenciales y su clave local, vacía los campos y desconecta el token en memoria. **Desconectar** elimina solo el token, conservando las credenciales. Si el navegador bloquea el almacenamiento o se usa un contexto sin Web Crypto, la app informa que no pudo guardar y no recurre a texto plano.
 
@@ -174,7 +188,7 @@ Parámetros comunes: fecha, organización, circuito contable, cuenta, moneda y e
 
 La fecha del reporte es siempre el día de hoy en `America/Buenos_Aires`, es de solo lectura y se calcula nuevamente antes de cada consulta, después de obtener el token. No se guarda como parámetro reutilizable ni depende de la fecha de corte del flujo. Se actualiza al volver a la ventana y al cambiar el día. La fecha almacenada en los datos importados sigue indicando la fecha real de aquella consulta. Si todavía no hay filtros guardados, se recuperan los de la última carga API disponible; limpiar un filtro también persiste.
 
-La llamada del navegador al servidor usa POST; el servidor realiza el GET requerido por Finnegans. El token no aparece en la URL del navegador ni se guarda con los filtros o datos. Los resultados permanecen en el navegador como las cargas de Excel.
+La llamada del navegador al servidor usa POST; el servidor realiza el GET requerido por Finnegans. El token no aparece en la URL del navegador ni se guarda con los filtros o datos. Los resultados se guardan en PostgreSQL cuando está habilitada la persistencia compartida; de lo contrario, permanecen en el navegador como las cargas de Excel.
 
 El adaptador admite filas JSON directas o dentro de contenedores `data`, `rows`, `items`, `result`, `records`, entre otros. Reconoce los campos de composición `IMPORTEMONPPAL`, `IMPORTEMONTRAN` y sus equivalentes del Excel. En la API, `Fecha` es la fecha del comprobante y `FechaVto` la fecha de vencimiento; tienen prioridad sobre los alias del Excel. Las fechas admiten `AAAA-MM-DD`, `DD/MM/AAAA` y `DD-MM-AAAA` (formato observado en Finnegans), con validación del calendario. `Vencimiento` / `Venc.` se conserva como clasificación de texto, nunca como fecha. Mantiene signos e importe original USD. Si falta la fecha de vencimiento, solo la reconstruye con mora positiva respecto de la fecha del reporte o con una condición simple en días, informándolo al usuario.
 
@@ -187,5 +201,5 @@ Después de cada consulta, **Ver llamada y respuesta de Finnegans** muestra el G
 - La identidad visual usa el sistema de diseño de Fisterra: Montserrat, fondo gris, navy y titulares rojos. Los recursos se conservan en `app/brand/`.
 - El generador incorpora los tokens, las fuentes y el logo en el HTML final. El logo conserva su geometría; se amplió su área SVG para evitar recortar el wordmark.
 
-- Las reprogramaciones, exclusiones, incobrables y cargas de plantillas se guardan en el navegador de cada usuario.
+- Las reprogramaciones, exclusiones, incobrables y cargas de plantillas se guardan centralmente cuando la instalación tiene PostgreSQL y clave de acceso; en modo local permanecen en el navegador.
 - Próximo paso: reemplazar los Excel por consultas al datawarehouse de Finnegans.
