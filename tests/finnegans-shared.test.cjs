@@ -48,10 +48,10 @@ test('shared authentication failures preserve provider secrecy and never fetch a
  let n=0;global.fetch=async()=>{n++;return new Response('shared-secret private provider error',{status:401})};
  const r=await invoke(reportHandler,{shared:true,source:'CLI'});assert.equal(r.statusCode,401);assert.equal(n,1);assert.ok(!JSON.stringify(r.body).includes('shared-secret'));
 }));
-test('shared own cheque requests keep fixed type, scope and a server-side token',()=>configured(async()=>{
+test('shared own cheque requests keep configured type, scope and a server-side token',()=>configured(async()=>{
  global.fetch=async(url)=>{
   const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.token');
-  assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'1');
+  assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
   assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'BANCO');assert.equal(u.searchParams.get('PARAMWEBREPORT_MostrarSoloNoConciliados'),'true');
   return new Response(JSON.stringify([{RAZONSOCIAL:'Tercero',NUMERO:1,FECHAVTO:'20-11-2026',IMPMONEDATRANS:100,ESTADO:'Emitido'}]));
  };

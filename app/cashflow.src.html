@@ -220,7 +220,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.2">v1.0.2</span>
+    <span class="app-version" aria-label="Versión 1.0.3">v1.0.3</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
   </div>
@@ -723,7 +723,7 @@ async function restoreCredentials(){
     }
   }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
 }
-const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
+const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['tipoCheque','Tipo de cheque'],['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
 const REPORT_FILTER_KEY=LS+'-report-filters';
 function reportToday(){
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en',{timeZone:'America/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
@@ -734,7 +734,7 @@ function restoreReportFilters(){
   try{stored=JSON.parse(localStorage.getItem(REPORT_FILTER_KEY)||'null')}catch{failed=true}
   return Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>{
     const saved=stored?.v===1&&stored.filters&&Object.prototype.hasOwnProperty.call(stored.filters,k)?stored.filters[k]:S.data[k]?.filters;
-    const filters=Object.fromEntries(fields.map(([key])=>[key,typeof saved?.[key]==='string'?saved[key].slice(0,256):'']));
+    const filters=Object.fromEntries(fields.map(([key])=>[key,typeof saved?.[key]==='string'?saved[key].slice(0,256):key==='tipoCheque'?'0':'']));
     return [k,{filters,busy:false,message:failed?'No se pudieron recuperar los parámetros guardados.':'',error:failed}];
   }));
 }
@@ -759,11 +759,12 @@ function reportDiagnosticsHTML(k){
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
   const title=k==='CHP'?'Parámetros de cheques propios':'Parámetros de composición de saldos';
-  const chequeNote=k==='CHP'?'<p class="note">Tipo de cheque: propios (TipoCheque = 1). Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Seleccioná el estado que querés proyectar: la consulta puede incluir cheques ya conciliados si elegís “No”.</p>':'';
+  const chequeNote=k==='CHP'?'<p class="note">Tipo de cheque: 0 = Propio; 1 = De tercero. Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Seleccioná el estado que querés proyectar: la consulta puede incluir cheques ya conciliados si elegís “No”.</p>':'';
   if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p>${chequeNote}</details>`;
   const r=REPORT_STATE[k],fields=[['fecha',k==='CHP'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
   const control=(key)=>{
     const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy?' disabled':''}`;
+    if(key==='tipoCheque')return `<select ${attrs}><option value="0"${r.filters[key]!=='1'?' selected':''}>0 = Propio</option><option value="1"${r.filters[key]==='1'?' selected':''}>1 = De tercero</option></select>`;
     if(key==='mostrarSoloNoConciliados')return `<select ${attrs}><option value="false"${r.filters[key]!=='true'?' selected':''}>No</option><option value="true"${r.filters[key]==='true'?' selected':''}>Sí</option></select>`;
     const dateField=key==='fecha'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
     return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
@@ -859,7 +860,7 @@ function renderDat(){
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button></div>`:''}
     <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
   <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores y cheques propios: API disponible · otras fuentes: Excel o integración pendiente</p>
-  <div class="prose"><p>Clientes y Proveedores consultan composición de saldos; Cheques propios consulta situación de cheques (TipoCheque = 1). El resto de las integraciones se incorporará por fuente:</p>
+  <div class="prose"><p>Clientes y Proveedores consultan composición de saldos; Cheques propios consulta situación de cheques (0 = Propio; 1 = De tercero). El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>

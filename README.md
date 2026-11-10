@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.2**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.3**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -95,17 +95,17 @@ Cada tarjeta de fuente presenta **Subir Excel**, **Obtener por API** y **Quitar*
 
 ### Composición de saldos por API
 
-Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Cheques propios consulta `ApiSituacionCheques`, con `PARAMWEBREPORT_TipoCheque=1` fijo. Las otras fuentes todavía requieren configurar su integración.
+Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoProveedor`, respectivamente, a través de `api/finnegans-report.js`. Cheques propios consulta `ApiSituacionCheques`, con `PARAMWEBREPORT_TipoCheque` configurable: `0 = Propio` (predeterminado) y `1 = De tercero`. Las otras fuentes todavía requieren configurar su integración.
 
 ### Cheques propios por API
 
-La pastilla **Cheques propios → Parámetros de cheques propios** permite guardar Estado, Tercero, Circuito contable, Cuenta contable, Empresa/sucursal, Vencimiento desde/hasta y Mostrar solo no conciliados. Los nombres de parámetros respetan las mayúsculas del endpoint: `FechaHasta`, `TipoCheque`, `Estado`, `Organizacion`, `CircuitoContable`, `CuentaContable`, `Empresa`, `FechaVencimientoDesde`, `FechaVencimientoHasta` y `MostrarSoloNoConciliados`, todos con prefijo `PARAMWEBREPORT_`.
+La pastilla **Cheques propios → Parámetros de cheques propios** permite guardar Tipo de cheque (`0 = Propio`, `1 = De tercero`), Estado, Tercero, Circuito contable, Cuenta contable, Empresa/sucursal, Vencimiento desde/hasta y Mostrar solo no conciliados. La selección del tipo persiste en el navegador; al actualizar desde una versión sin selector comienza en `0`. Los nombres de parámetros respetan las mayúsculas del endpoint: `FechaHasta`, `TipoCheque`, `Estado`, `Organizacion`, `CircuitoContable`, `CuentaContable`, `Empresa`, `FechaVencimientoDesde`, `FechaVencimientoHasta` y `MostrarSoloNoConciliados`, todos con prefijo `PARAMWEBREPORT_`.
 
 `FechaHasta` siempre es hoy (Argentina); los límites de vencimiento son opcionales y persisten. No se fijan las fechas de 2020 del ejemplo. `MostrarSoloNoConciliados` se envía explícitamente como `false` por defecto, o `true` si se elige Sí. Seleccionar el estado y/o solo no conciliados que corresponda para evitar proyectar cheques ya pagados. Cada consulta obtiene un token nuevo y lo envía como `ACCESS_TOKEN`.
 
 El adaptador reconoce fecha de vencimiento, tercero, número/documento, importe, moneda, estado, cuenta y banco. Los importes se incorporan como egresos en **Cheques emitidos**, conservando su vencimiento. Si la respuesta usa campos no reconocidos, falla la carga completa y **Ver llamada y respuesta de Finnegans** permite revisar el JSON sin perder la carga anterior. Los ejemplos de prueba usan la estructura del Excel. La consulta manual del 10/11/2026 con empresa `EMPRE01`, sin otros filtros y con `MostrarSoloNoConciliados=false`, respondió HTTP 200 y `[]`: la conectividad está verificada, pero el esquema de cheques reales sigue pendiente de una respuesta no vacía.
 
-En modo compartido se habilita con `FINNEGANS_CHP_FILTERS`, por ejemplo `{"empresa":"EMPRE01","cuenta":"CODIGO_CUENTA_BANCARIA","mostrarSoloNoConciliados":"false"}`. La cuenta bancaria debe ser un código real de Finnegans; no usar el código de cuenta de proveedores. Admite también `estado`, `organizacion`, `circuitocontable`, `fechaVencimientoDesde` y `fechaVencimientoHasta` como cadenas.
+En modo compartido se habilita con `FINNEGANS_CHP_FILTERS`, por ejemplo `{"tipoCheque":"0","empresa":"EMPRE01","cuenta":"CODIGO_CUENTA_BANCARIA","mostrarSoloNoConciliados":"false"}`. La cuenta bancaria debe ser un código real de Finnegans; no usar el código de cuenta de proveedores. Admite también `estado`, `organizacion`, `circuitocontable`, `fechaVencimientoDesde` y `fechaVencimientoHasta` como cadenas. En este modo el tipo se administra desde Vercel junto con los demás filtros.
 
 1. Ingresar o recuperar las credenciales guardadas. Probar conexión es opcional.
 2. En la tarjeta, abrir **Parámetros de composición de saldos** para agregar filtros. Se guardan automáticamente por fuente en este navegador y se recuperan al volver a abrir la app. Los filtros son códigos de Finnegans y, si están vacíos, se omiten. No se envían los textos de ejemplo de la documentación como valores.
