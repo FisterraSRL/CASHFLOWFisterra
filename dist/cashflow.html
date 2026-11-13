@@ -315,7 +315,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.22">v1.0.22</span>
+    <span class="app-version" aria-label="Versión 1.0.23">v1.0.23</span>
     <span class="company">FISTERRA EJEMPLO</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -580,7 +580,7 @@ function liHTML(r){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportT
 
 /* ---------- RESUMEN ---------- */
 function calcIdx(F,mv){
-  const B=S.bal||{},lim=addD(S.ref,365),cur=mv.filter(r=>r.f<=lim),d30=addD(S.ref,30),m30=addD(S.ref,-30);
+  const B=S.bal||{},lim=addD(S.ref,365),cur=mv.filter(r=>r.f<=lim),d30=addD(S.ref,30);
   let cob=0,pag=0,pag30=0;for(const r of cur){const v=ars(r);if(isIn(r.cat))cob+=v;else{pag-=v;if(r.f<=d30)pag30-=v}}
   const ctn=S.saldo+cob-pag,liq=pag>0?(S.saldo+cob)/pag:null,liqI=pag30>0?S.saldo/pag30:null;
   let mn=Infinity,mk=null,neg=0;for(const c of F.cols){if(c==='POST')continue;const v=F.sal[c];if(v<mn){mn=v;mk=c}if(v<0)neg++}
@@ -590,10 +590,13 @@ function calcIdx(F,mv){
   const cli=cliAll.filter(r=>r.m>0&&r.fc),prv=prvAll.filter(r=>r.m<0&&r.fc);
   const pc=wavg(cli.map(r=>[Math.max(0,dd(r.f,r.fc)),ars(r)])),pp=wavg(prv.map(r=>[Math.max(0,dd(r.f,r.fc)),ars(r)]));
   const sCli=cliAll.reduce((a,r)=>a+ars(r),0),sPrv=-prvAll.reduce((a,r)=>a+ars(r),0);
-  const v30=cli.filter(r=>r.fc>m30&&r.fc<=S.ref).reduce((a,r)=>a+ars(r),0),c30=-prv.filter(r=>r.fc>m30&&r.fc<=S.ref).reduce((a,r)=>a+ars(r),0);
-  const dso=B.v>0?sCli/B.v*365:(v30>0?sCli/v30*30:null),dpo=B.c>0?sPrv/B.c*365:(c30>0?sPrv/c30*30:null);
+  const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'')&&Number.isFinite(D(s).getTime())&&iso(D(s))===s;
+  const cliAt=validDate(S.data.CLI.at)?S.data.CLI.at:reportToday();
+  const aging=cliAll.filter(r=>r.m>0&&ars(r)>0&&validDate(r.fc)&&r.fc<=cliAt);
+  const diasCalle=wavg(aging.map(r=>[dd(cliAt,r.fc),ars(r)]));
+  const dso=B.v>0?sCli/B.v*365:null,dpo=B.c>0?sPrv/B.c*365:null;
   const solv=(B.a>0&&B.p>0)?B.a/B.p:null;
-  return{cob,pag,pag30,ctn,liq,liqI,need:Math.max(0,-mn),mk,neg,pc,pp,sCli,sPrv,dso,dpo,estV:!(B.v>0),estC:!(B.c>0),solv,ccc:(dso!=null&&dpo!=null)?dso-dpo:null}}
+  return{cob,pag,pag30,ctn,liq,liqI,need:Math.max(0,-mn),mk,neg,pc,pp,sCli,sPrv,diasCalle,cliAt,agingCount:aging.length,cliPositiveCount:cliAll.filter(r=>r.m>0&&ars(r)>0).length,dso,dpo,solv,ccc:(dso!=null&&dpo!=null)?dso-dpo:null}}
 function idxHTML(I){
   const B=S.bal||{};
   const st=(k,t)=>`<span class="st ${k}"><i aria-hidden="true">${k==='good'?'✓':'!'}</i>${t}</span>`;
@@ -604,8 +607,9 @@ function idxHTML(I){
    ['Brecha financiera',$M(-I.need),I.need?st('crit','Requiere fondos'):st('good','Cubierta'),I.need?`Mayor necesidad ${per(I.mk)}; ${I.neg} período${I.neg===1?'':'s'} con saldo negativo en ${S.hor} días`:`El saldo proyectado no queda negativo en ${S.hor} días`],
    ['Liquidez corriente',x(I.liq),I.liq==null?'':I.liq<1?st('crit','Menor a 1'):I.liq<1.5?st('warn','Ajustada'):st('good','Holgada'),'(Caja + a cobrar) ÷ a pagar a 12 meses. Sin inventarios equivale a la prueba ácida'],
    ['Liquidez inmediata',x(I.liqI),I.liqI==null?'':I.liqI<0.5?st('crit','Baja'):I.liqI<1?st('warn','Parcial'):st('good','Cubre'),`Caja ÷ pagos vencidos y de los próximos 30 días (${$M(I.pag30)})`],
-   ['DSO · días de cobro',dn(I.dso),I.estV?'<span class="st">Estimado</span>':'',`Saldo de clientes ${$M(I.sCli)} ÷ ventas${I.estV?' de los últimos 30 días':' anuales'}. Plazo pactado promedio ${dn(I.pc)}`],
-   ['DPO · días de pago',dn(I.dpo),I.estC?'<span class="st">Estimado</span>':'',`Saldo de proveedores ${$M(I.sPrv)} ÷ compras${I.estC?' de los últimos 30 días':' anuales'}. Plazo pactado promedio ${dn(I.pp)}`],
+   ['Días en la calle · clientes',dn(I.diasCalle),I.agingCount?'<span class="st">Cartera pendiente</span>':'',I.agingCount?`Antigüedad promedio desde la fecha de comprobante, ponderada por saldo de ${I.agingCount} factura${I.agingCount===1?'':'s'} abierta${I.agingCount===1?'':'s'} al ${fd(I.cliAt)}.${I.cliPositiveCount>I.agingCount?' Se omitieron comprobantes sin fecha válida.':''} No es el DSO de ventas.`:'Sin facturas pendientes con fecha de comprobante válida.'],
+   ['DSO · días de cobro',dn(I.dso),'',I.dso==null?'Requiere ventas reales de los últimos 12 meses.':'Saldo de clientes ÷ ventas de los últimos 12 meses × 365. Plazo pactado promedio '+dn(I.pc)],
+   ['DPO · días de pago',dn(I.dpo),'',I.dpo==null?'Requiere compras reales de los últimos 12 meses.':'Saldo de proveedores ÷ compras de los últimos 12 meses × 365. Plazo pactado promedio '+dn(I.pp)],
    ['Brecha de plazos (DSO − DPO)',I.ccc==null?'s/d':(I.ccc>0?'+':'')+nf0.format(I.ccc)+' días',I.ccc==null?'':I.ccc>0?st('warn','Se cobra después de pagar'):st('good','Se paga después de cobrar'),'Días de operación que se financian con fondos propios o crédito. Sin inventarios'],
    ['Solvencia',I.solv==null?'Requiere balance':x(I.solv),I.solv==null?'':I.solv<1?st('crit','Menor a 1'):I.solv<1.5?st('warn','Ajustada'):st('good','Sólida'),'Activo total ÷ pasivo total, del último balance']];
   const inp=(id,l,v)=>`<div class="fld"><label for="${id}">${l}</label><input class="num" id="${id}" inputmode="decimal" value="${v?nf0.format(v):''}" placeholder="Opcional"></div>`;
