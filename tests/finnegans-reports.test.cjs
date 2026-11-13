@@ -21,7 +21,7 @@ test('bank URL uses the cut-off date and optional company with the exact paramet
  assert.equal(u.searchParams.get('PARAMETER_Empresa'),'E1');
  assert.equal(u.searchParams.get('ACCESS_TOKEN'),'test.token');
  assert.equal(u.searchParams.has('PARAMWEBREPORT_fecha'),false);
- assert.equal(reportUrl('BCO',{fecha:'2026-11-13'},'token').searchParams.has('PARAMETER_Empresa'),false);
+ assert.throws(()=>reportUrl('BCO',{fecha:'2026-11-13'},'token'),/empresa de Finnegans/);
 });
 test('bank balances keep account, company, original currency, zero and negative balances',()=>{
  const out=normalizeReport('BCO',{rows:[
@@ -31,6 +31,10 @@ test('bank balances keep account, company, original currency, zero and negative 
  ]},'2026-11-13');
  assert.deepEqual(out.rows.map(r=>[r.company,r.account,r.c,r.m]),[['Empresa A','CC 123','ARS',1250000.5],['Empresa A','CC 456','USD',-15.25],['Empresa B','CC 123','ARS',0]]);
  assert.equal(out.received,3);
+});
+test('real bank report fields derive pesos from account name and use CuentaID as identity',()=>{
+ const out=normalizeReport('BCO',[{EMPRESA:'FISTERRA SRL',CUENTAID:435,CUENTA:'Banco Frances Cta Cte $',BANCO:'BBVA BANCO FRANCES S.A.',SALDOCUENTA:62262832.18},{EMPRESA:'FISTERRA SRL',CUENTAID:22,CUENTA:'Banco Patagonia Cta Cte $',BANCO:'BANCO PATAGONIA S.A.',SALDOCUENTA:48610169.63}],'2026-11-13');
+ assert.deepEqual(out.rows.map(r=>[r.accountId,r.c,r.m]),[['435','ARS',62262832.18],['22','ARS',48610169.63]]);
 });
 test('bank report rejects missing fields, stale dates, duplicate accounts and partial pages',()=>{
  const row={Empresa:'E1',Cuenta:'CC 1',Moneda:'ARS',Saldo:100,FechaCorte:'2026-11-13'};

@@ -124,13 +124,13 @@ Para que un navegador nuevo pueda consultar clientes y proveedores sin volver a 
 | --- | --- |
 | `FINNEGANS_CLIENT_ID` | Client_ID del usuario de integración |
 | `FINNEGANS_CLIENT_SECRET` | Client_Secret / SECRET_KEY del mismo usuario |
-| `FINNEGANS_BCO_FILTERS` | Opcional: `{"empresa":"EMPRE01"}` para limitar el saldo bancario a una empresa; sin esta variable se consultan todas las empresas de la instalación |
+| `FINNEGANS_BCO_FILTERS` | `{"empresa":"EMPRE01"}` para consultar los saldos bancarios de esa empresa |
 | `FINNEGANS_CLI_FILTERS` | `{"empresa":"EMPRE01","cuenta":"DxVta","moneda":"PES"}` |
 | `FINNEGANS_PRV_FILTERS` | `{"empresa":"EMPRE01","cuenta":"2.1.1/01/01","moneda":"PES"}` |
 | `FINNEGANS_EJC_FILTERS` | `{"empresa":"EMPRE01","detallarAplicacion":"true"}` |
 | `FINNEGANS_EJP_FILTERS` | `{"empresa":"EMPRE01","fechaDesde":"2026-10-01","detallarAplicacion":"true"}` |
 
-Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa y cuenta para composición de saldos y cheques; cobranza y pagos exigen empresa y no tienen filtro de cuenta. Saldo de bancos admite un filtro de empresa opcional y, de estar configurado, no se puede ampliar desde el navegador. La fecha de saldo bancario se toma de la fecha de corte elegida en la pantalla; las demás fechas de reporte se calculan con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por cada reporte dentro del JSON.
+Los filtros de ejemplo corresponden a los códigos usados en la instalación actual; verificar que sean los deseados. El servidor exige empresa para saldos bancarios; empresa y cuenta para composición de saldos y cheques; cobranza y pagos exigen empresa y no tienen filtro de cuenta. No se pueden ampliar estos filtros desde el navegador. La fecha de saldo bancario se toma de la fecha de corte elegida en la pantalla; las demás fechas de reporte se calculan con el día actual de Argentina. Se pueden agregar los otros filtros admitidos por cada reporte dentro del JSON.
 
 `GET /api/finnegans-config` informa si está habilitada la conexión y sus filtros; no devuelve credenciales ni tokens. **Probar conexión** valida las credenciales desde el servidor sin devolver el token. Cada consulta compartida obtiene un token nuevo desde Vercel y lo usa para consultar el reporte. No guardar las credenciales en GitHub ni en variables con prefijo público.
 
@@ -154,9 +154,9 @@ Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoPr
 
 ### Saldo de bancos por API
 
-La pastilla **Saldo de bancos** consulta `SaldoCuentasBanco` con `PARAMETER_FechaCorte` igual a la fecha de corte de la pantalla y `PARAMETER_Empresa` opcional. En instalaciones con credenciales compartidas de Finnegans queda habilitada para todas las empresas; `FINNEGANS_BCO_FILTERS` permite limitarla a una empresa. La app muestra banco, cuenta, empresa, moneda y saldo original por fila. Convierte cada moneda con la cotización configurada y suma esos saldos como saldo inicial del flujo. Si cambia la fecha de corte, el saldo API anterior deja de ser saldo inicial hasta consultar de nuevo. Se puede usar un saldo manual para la nueva fecha. La actualización se ejecuta solo al pulsar **Obtener por API** o **Actualizar APIs**.
+La pastilla **Saldo de bancos** consulta `SaldoCuentasBanco` con `PARAMETER_FechaCorte` igual a la fecha de corte de la pantalla y `PARAMETER_Empresa` con el código de empresa. En instalaciones con credenciales compartidas de Finnegans requiere `FINNEGANS_BCO_FILTERS`; en la conexión local se configura en la pastilla. La app muestra banco, cuenta, empresa, moneda y saldo original por fila. Convierte cada moneda con la cotización configurada y suma esos saldos como saldo inicial del flujo. Si cambia la fecha de corte, el saldo API anterior deja de ser saldo inicial hasta consultar de nuevo. Se puede usar un saldo manual para la nueva fecha. La actualización se ejecuta solo al pulsar **Obtener por API** o **Actualizar APIs**.
 
-El importador exige cuenta, moneda y saldo final numérico en moneda de la cuenta; también rechaza fechas distintas del corte, cuentas duplicadas y respuestas paginadas. Una respuesta inválida conserva los datos anteriores y permite consultar el diagnóstico. La API proporciona el saldo registrado en Finnegans; la conciliación con extractos bancarios requiere otro dato o control.
+La respuesta real de Fisterra usa `EMPRESA`, `CUENTAID`, `CUENTA`, `BANCO` y `SALDOCUENTA`; no incluye una columna de moneda. El importador reconoce el símbolo `$` de las cuentas en pesos, `U$S`/`USD` y códigos explícitos de otras monedas en el nombre de cuenta. Si no puede identificar la moneda, detiene la carga para evitar una suma incorrecta. También rechaza fechas distintas del corte, cuentas duplicadas y respuestas paginadas. Una respuesta inválida conserva los datos anteriores y permite consultar el diagnóstico. La API proporciona el saldo registrado en Finnegans; la conciliación con extractos bancarios requiere otro dato o control.
 
 ### Cheques propios por API
 

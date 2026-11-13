@@ -4,7 +4,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require('../../api/finnegans-report.js'),configHandler=require('../../api/finnegans-config.js');
 (async()=>{
  const original=global.fetch;let mode='local',serial=0,failSupplier=true;const calls=[],bodyCalls=[];
- const envKeys=['FINNEGANS_CLIENT_ID','FINNEGANS_CLIENT_SECRET','FINNEGANS_CLI_FILTERS','FINNEGANS_PRV_FILTERS','FINNEGANS_CHP_FILTERS','FINNEGANS_CHT_FILTERS'];
+ const envKeys=['FINNEGANS_CLIENT_ID','FINNEGANS_CLIENT_SECRET','FINNEGANS_BCO_FILTERS','FINNEGANS_CLI_FILTERS','FINNEGANS_PRV_FILTERS','FINNEGANS_CHP_FILTERS','FINNEGANS_CHT_FILTERS'];
  const before=Object.fromEntries(envKeys.map(k=>[k,process.env[k]]));envKeys.forEach(k=>delete process.env[k]);
  global.fetch=async(url)=>{
   const u=new URL(url);if(u.pathname==='/api/oauth/token')return mode==='authfail'?new Response('authentication unavailable',{status:500}):new Response('batch.test.'+(++serial));
@@ -29,6 +29,7 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
  try{
   const url=`http://127.0.0.1:${server.address().port}`,p=await browser.newPage({viewport:{width:1280,height:950}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto(url);await p.locator('[data-t=dat]').click();await p.locator('#apiClientId').fill('batch-id');await p.locator('#apiClientSecret').fill('batch-secret');await p.waitForFunction(()=>FAPI.saved);
+  await p.evaluate(()=>{REPORT_STATE.BCO.filters.empresa='E1';persistReportFilters()});
   await p.evaluate(()=>{S.data.PRV={orig:'previous supplier',rows:[{s:'PRV',id:'PRV-old',cat:'Proveedores',p:'Proveedor anterior',doc:'FC-old',f:'2026-11-20',m:-100,c:'ARS'}]};S.data.CHT={orig:'previous cheque',rows:[{s:'CHT',id:'CHT-old',cat:'Cheques en cartera',p:'Cliente anterior',doc:'Ch-old',f:'2026-11-20',m:100,c:'ARS',e:'En Cartera'}]};save()});
   const prior=await p.evaluate(()=>({prv:JSON.stringify(S.data.PRV.rows),cht:JSON.stringify(S.data.CHT.rows),pre:JSON.stringify(S.data.PRE)}));
   await p.getByRole('button',{name:'Actualizar APIs',exact:true}).click();
@@ -71,12 +72,12 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
   assert.deepEqual(separate.included,['Empresa B']);
   mode='local';
   await p.getByRole('button',{name:'Olvidar credenciales',exact:true}).click();await p.waitForFunction(()=>!FAPI.clientId);const n=calls.length;await p.getByRole('button',{name:'Actualizar APIs',exact:true}).click();await p.waitForFunction(()=>!API_BATCH.busy);assert.equal(calls.length,n);assert.match(await p.locator('#v-dat').innerText(),/Completá Client_ID y Client_Secret antes/);
-  mode='shared';failSupplier=false;Object.assign(process.env,{FINNEGANS_CLIENT_ID:'server-id',FINNEGANS_CLIENT_SECRET:'server-secret',FINNEGANS_PRV_FILTERS:JSON.stringify({empresa:'E1',cuenta:'PRV'})});
+  mode='shared';failSupplier=false;Object.assign(process.env,{FINNEGANS_CLIENT_ID:'server-id',FINNEGANS_CLIENT_SECRET:'server-secret',FINNEGANS_BCO_FILTERS:JSON.stringify({empresa:'E1'}),FINNEGANS_PRV_FILTERS:JSON.stringify({empresa:'E1',cuenta:'PRV'})});
   const c=await browser.newContext(),shared=await c.newPage();await shared.goto(url);await shared.evaluate(()=>sharedReady);calls.length=0;bodyCalls.length=0;serial=0;
   await shared.locator('[data-t=dat]').click();await shared.getByRole('button',{name:'Actualizar APIs',exact:true}).click();await shared.waitForFunction(()=>!API_BATCH.busy);
   assert.equal(calls.length,2);assert.equal(serial,2);assert.deepEqual(await shared.evaluate(()=>API_BATCH.results.map(r=>r.k)),['BCO','PRV']);assert.equal(bodyCalls[0].shared,true);assert.equal(bodyCalls[0].access_token,undefined);
   assert.equal(await shared.locator('#apiClientSecret').count(),0);assert.equal(await shared.evaluate(()=>API_BATCH.results[0].status),'updated');await c.close();
-  delete process.env.FINNEGANS_PRV_FILTERS;const emptyContext=await browser.newContext(),empty=await emptyContext.newPage();await empty.goto(url);await empty.evaluate(()=>sharedReady);const countBefore=calls.length;await empty.locator('[data-t=dat]').click();await empty.getByRole('button',{name:'Actualizar APIs',exact:true}).click();await empty.waitForFunction(()=>!API_BATCH.busy);assert.equal(calls.length,countBefore+1);assert.deepEqual(await empty.evaluate(()=>API_BATCH.results.map(r=>r.k)),['BCO']);await emptyContext.close();
+  delete process.env.FINNEGANS_BCO_FILTERS;delete process.env.FINNEGANS_PRV_FILTERS;const emptyContext=await browser.newContext(),empty=await emptyContext.newPage();await empty.goto(url);await empty.evaluate(()=>sharedReady);const countBefore=calls.length;await empty.locator('[data-t=dat]').click();await empty.getByRole('button',{name:'Actualizar APIs',exact:true}).click();await empty.waitForFunction(()=>!API_BATCH.busy);assert.equal(calls.length,countBefore);assert.match(await empty.locator('#v-dat').innerText(),/No hay fuentes API configuradas/);await emptyContext.close();
   assert.deepEqual(errors,[]);console.log(JSON.stringify({allSevenSources:true,oneValidLocalTokenForBatch:true,duplicateBatchPrevented:true,partialFailureContinues:true,emptyAndFailurePreserveData:true,excelSourcesUntouched:true,perSourceResults:true,missingCredentialsNoNetwork:true,sharedOnlyConfiguredSources:true,noSharedTokenInBrowser:true,responsive:true}));
  }finally{await browser.close();await new Promise(r=>server.close(r));global.fetch=original;for(const [k,v]of Object.entries(before))if(v===undefined)delete process.env[k];else process.env[k]=v}
 })().catch(e=>{console.error(e);process.exitCode=1});
