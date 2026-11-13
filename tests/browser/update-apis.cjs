@@ -29,14 +29,20 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
   const url=`http://127.0.0.1:${server.address().port}`,p=await browser.newPage({viewport:{width:1280,height:950}}),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto(url);await p.locator('[data-t=dat]').click();await p.locator('#apiClientId').fill('batch-id');await p.locator('#apiClientSecret').fill('batch-secret');await p.waitForFunction(()=>FAPI.saved);
   await p.evaluate(()=>{S.data.PRV={orig:'previous supplier',rows:[{s:'PRV',id:'PRV-old',cat:'Proveedores',p:'Proveedor anterior',doc:'FC-old',f:'2026-11-20',m:-100,c:'ARS'}]};S.data.CHT={orig:'previous cheque',rows:[{s:'CHT',id:'CHT-old',cat:'Cheques en cartera',p:'Cliente anterior',doc:'Ch-old',f:'2026-11-20',m:100,c:'ARS',e:'En Cartera'}]};save()});
-  const prior=await p.evaluate(()=>({prv:JSON.stringify(S.data.PRV),cht:JSON.stringify(S.data.CHT),pre:JSON.stringify(S.data.PRE)}));
+  const prior=await p.evaluate(()=>({prv:JSON.stringify(S.data.PRV.rows),cht:JSON.stringify(S.data.CHT.rows),pre:JSON.stringify(S.data.PRE)}));
   await p.getByRole('button',{name:'Actualizar APIs',exact:true}).click();
   assert.equal(await p.locator('#updateAllApis').isDisabled(),true);assert.equal(await p.locator('[data-api=CLI]').isDisabled(),true);
   await p.evaluate(()=>updateAllApis()); // Duplicate invocation must not run another batch.
   await p.waitForFunction(()=>!API_BATCH.busy);assert.equal(serial,1);assert.equal(calls.length,6);
   assert.deepEqual(calls.map(c=>c.token),Array(6).fill('batch.test.1'));assert.deepEqual(calls.slice(2,4).map(c=>c.type),['0','1']);
   assert.deepEqual(await p.evaluate(()=>API_BATCH.results.map(r=>r.status)),['updated','error','updated','empty','updated','updated']);
-  assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRV)),prior.prv);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CHT)),prior.cht);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRE)),prior.pre);
+  assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRV.rows)),prior.prv);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CHT.rows)),prior.cht);assert.equal(await p.evaluate(()=>JSON.stringify(S.data.PRE)),prior.pre);
+  assert.deepEqual(await p.evaluate(()=>[S.data.PRV.lastCheck?.status,S.data.CHT.lastCheck?.status]),['error','empty']);
+  assert.match(await p.locator('#sourceBanner').innerText(),/proyección puede estar incompleta/);
+  const savedContext=await browser.newContext({storageState:await p.context().storageState()});
+  const saved=await savedContext.newPage();await saved.goto(url);
+  assert.deepEqual(await saved.evaluate(()=>[S.data.PRV.lastCheck?.status,S.data.CHT.lastCheck?.status]),['error','empty']);
+  await savedContext.close();
   assert.match(await p.locator('#v-dat').innerText(),/4 fuente\(s\) actualizada\(s\), 1 sin registros y 1 con error/);assert.equal(await p.locator('#updateAllApis').isDisabled(),false);
   for(const width of [320,390,1280]){await p.setViewportSize({width,height:950});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
   mode='authfail';await p.evaluate(()=>{FAPI.token='';FAPI.expiresAt=0});const callsBeforeAuthFailure=calls.length;
@@ -44,9 +50,9 @@ const tokenHandler=require('../../api/finnegans-token.js'),reportHandler=require
   assert.equal(calls.length,callsBeforeAuthFailure);
   assert.deepEqual(await p.evaluate(()=>API_BATCH.results.map(r=>r.status)),['error','skipped','skipped','skipped','skipped','skipped']);
   assert.match(await p.locator('#v-dat').innerText(),/HTTP 500/);
-  mode='multi';const previousClient=await p.evaluate(()=>JSON.stringify(S.data.CLI));
+  mode='multi';const previousClient=await p.evaluate(()=>JSON.stringify(S.data.CLI.rows));
   await p.locator('[data-api=CLI]').click();await p.waitForFunction(()=>!REPORT_STATE.CLI.busy);
-  assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CLI)),previousClient);
+  assert.equal(await p.evaluate(()=>JSON.stringify(S.data.CLI.rows)),previousClient);
   assert.match(await p.locator('#msg-CLI').innerText(),/Faltan cotizaciones.*MXN/);
   await p.locator('#fx-MXN').fill('80');await p.locator('#fx-MXN').dispatchEvent('change');
   await p.locator('[data-api=CLI]').click();await p.waitForFunction(()=>!REPORT_STATE.CLI.busy);

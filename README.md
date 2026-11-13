@@ -17,6 +17,10 @@ El frontend se genera como un único HTML. Las consultas a Finnegans y, cuando s
 - **Presupuesto vs real**: comparación mensual por categoría.
 - **Datos y fuentes**: carga de los Excel de Finnegans y de las plantillas.
 
+### Estado de actualización de las fuentes
+
+La aplicación muestra la fecha de los datos y el resultado de la última consulta de Clientes, Proveedores, Cheques propios, Cheques de terceros, Cobros ejecutados y Pagos ejecutados. Un aviso visible advierte si alguna de las cuatro fuentes principales tiene datos anteriores a hoy, fechas diferentes, una consulta fallida o una consulta vacía que conservó datos previos. Una fuente consultada sin registros y sin datos anteriores se distingue de una fuente que nunca se cargó. En un Excel subido por el usuario solo se conoce la fecha de carga, no la fecha real de los saldos; se muestra esa limitación y no se trata la carga como una consulta al día. El resultado de cada intento queda guardado con el estado de la instalación, incluso después de recargar o abrir desde otro equipo. La actualización sigue siendo manual.
+
 ## Cobros y pagos ejecutados
 
 La fuente anterior **Ejecutado** se divide en **Cobros ejecutados** y **Pagos ejecutados**, con cargas, ejemplos y botones Quitar independientes. Ambas usan las columnas `Mes`, `Categoría`, `Importe`: cobros admite categorías de ingreso y pagos categorías de egreso. Los importes se normalizan como magnitudes positivas; la comparación aplica el signo según la categoría. Una categoría del tipo contrario rechaza la carga y conserva los datos anteriores.

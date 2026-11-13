@@ -350,6 +350,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <label class="chk"><input type="checkbox" id="pChq"> Incluir cheques emitidos vencidos sin conciliar</label>
 </div>
 <div id="exBanner"></div>
+<div id="sourceBanner"></div>
 <div id="storageMessage" class="banner" role="status" hidden></div>
 
 <nav class="tabs" role="tablist">
@@ -1080,6 +1081,32 @@ function restoreReportFilters(){
 }
 const REPORT_STATE=restoreReportFilters();
 const API_BATCH={busy:false,message:'',error:false,results:[]};
+const PROJECTION_SOURCES=['CLI','PRV','CHP','CHT'];
+function sourceHealth(){
+  const today=reportToday(),dates=new Set(),issues=[],rows=[];
+  for(const k of Object.keys(REPORT_FIELDS)){
+    const d=S.data[k]||{rows:[]},n=d.rows?.length||0,at=/^\d{4}-\d{2}-\d{2}$/.test(d.at||'')?d.at:null,last=d.lastCheck,excelUpload=String(d.orig||'').startsWith('Excel · ');
+    const checkedAt=/^\d{4}-\d{2}-\d{2}$/.test(last?.at||'')?last.at:null;
+    let status=n?`Cargado · ${nf0.format(n)} registros${excelUpload?` · Excel subido${at?' el '+fd(at):''}; fecha del saldo no informada`:at?' · al '+fd(at):' · sin fecha'}`:last?.status==='empty'&&checkedAt?`Sin registros confirmado al ${fd(checkedAt)}`:'Sin datos cargados';
+    if(last?.status==='error')status+=` · falló la última consulta${checkedAt?' del '+fd(checkedAt):''}`;
+    if(last?.status==='empty'&&n)status+=` · la última consulta${checkedAt?' del '+fd(checkedAt):''} fue vacía; se conservan datos anteriores`;
+    rows.push({k,status,at,last,n});
+    if(!PROJECTION_SOURCES.includes(k))continue;
+    if(n&&at&&!excelUpload)dates.add(at);
+    if(last?.status==='error')issues.push(SRC[k].n+': falló la última consulta');
+    else if(last?.status==='empty'&&n)issues.push(SRC[k].n+': la última consulta fue vacía');
+    if(n){if(excelUpload)issues.push(SRC[k].n+': fecha del saldo del Excel no informada');else if(!at)issues.push(SRC[k].n+': fecha de los datos desconocida');else if(at<today)issues.push(SRC[k].n+': datos del '+fd(at));else if(at>today)issues.push(SRC[k].n+': fecha futura '+fd(at))}
+    else if(!(last?.status==='empty'&&checkedAt===today))issues.push(SRC[k].n+': sin carga vigente');
+  }
+  if(dates.size>1)issues.unshift('Las fuentes del flujo tienen fechas diferentes');
+  return{rows,issues,today};
+}
+function sourceHealthSection(){
+  const h=sourceHealth();
+  return `<div class="card" style="margin-bottom:16px"><h2>Estado de los datos</h2><p class="sub">Fechas y resultado de la última consulta de cada fuente. La aplicación solo actualiza Finnegans cuando pulsás Obtener por API o Actualizar APIs.</p>
+   ${h.issues.length?`<p class="note" style="color:var(--crit)">Revisar proyección: ${esc(h.issues.join(' · '))}.</p>`:'<p class="note" style="color:var(--good)">Las fuentes principales del flujo están al día.</p>'}
+   <div class="tblwrap"><table><thead><tr><th>Fuente</th><th>Datos disponibles</th></tr></thead><tbody>${h.rows.map(r=>`<tr><td>${esc(SRC[r.k].n)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
 function configuredApiSources(){return Object.keys(REPORT_FIELDS).filter(k=>!SHARED.enabled||!!SHARED.sources[k])}
 function batchSection(){
   const sources=configuredApiSources(),blocked=API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy);
@@ -1169,15 +1196,15 @@ async function obtainReport(k){
       throw new Error(data&&data.error||'No se pudo obtener el reporte. Se conservaron los datos anteriores.');
     }
     if(!data||data.source!==k||data.date!==filters.fecha||!Array.isArray(data.rows))throw new Error('Respuesta de reporte no válida. Se conservaron los datos anteriores.');
-    if(!data.rows.length){state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return {status:'empty'}}
+    if(!data.rows.length){S.data[k].lastCheck={status:'empty',at:data.date,checkedAt:new Date().toISOString()};save();state.message='La consulta no devolvió registros. Se conservaron los datos actuales; usá Quitar si querés vaciar esta fuente.';return {status:'empty'}}
     const withoutRate=missingFx(data.rows);
     if(withoutRate.length){withoutRate.forEach(code=>FX_PENDING.add(code));throw new Error('Faltan cotizaciones a pesos argentinos para '+withoutRate.join(', ')+'. Cargalas en Datos y fuentes y repetí la consulta; se conservaron los datos anteriores.')}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
     const extra=k==='EJC'||k==='EJP'?{applications:Array.isArray(data.applications)?data.applications:[],summary:data.summary||null,period:data.period||null}:{};
-    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),filters:{...filters},warnings,...extra};save();
+    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),lastCheck:{status:'updated',at:data.date,checkedAt:new Date().toISOString()},filters:{...filters},warnings,...extra};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
     return {status:'updated'};
-  }catch(error){state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error',authFailed:!tokenReady}}
+  }catch(error){S.data[k].lastCheck={status:'error',at:filters.fecha,checkedAt:new Date().toISOString()};save();state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error',authFailed:!tokenReady}}
   finally{state.busy=false;renderAll()}
 }
 function apiSection(){
@@ -1241,7 +1268,7 @@ function fxSection(){
 }
 function renderDat(){
   const v=$('#v-dat');
-  v.innerHTML=workspaceSection()+apiSection()+fxSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
+  v.innerHTML=workspaceSection()+sourceHealthSection()+apiSection()+fxSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
     const tot=['PPTO','EJC','EJP'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
@@ -1334,7 +1361,7 @@ function handleFile(k,file){const msg=$('#msg-'+k);if(!file)return;msg.className
     const need=(SRC[k].req||SRC[k].tpl.map(nk)).map(nk);const miss=need.filter(c=>!(c in rows[0]));
     if(miss.length)throw new Error('Faltan columnas: '+miss.join(', ')+'. Revisá que la fila 1 tenga los encabezados.');
     const out=parse(k,rows),withoutRate=missingFx(out);if(withoutRate.length){withoutRate.forEach(code=>FX_PENDING.add(code));renderDat();throw new Error('Faltan cotizaciones a pesos argentinos para '+withoutRate.join(', ')+'. Cargalas y volvé a subir el archivo.')}
-    clearOvr(k);S.data[k]={rows:out,orig:'Excel · '+file.name,at:todayISO};save();renderAll();
+    clearOvr(k);S.data[k]={rows:out,orig:'Excel · '+file.name,at:reportToday()};save();renderAll();
     const m2=$('#msg-'+k);if(m2){m2.className='msg ok';m2.textContent=out.length+' registros cargados.'}
   }catch(err){const current=$('#msg-'+k)||msg;current.className='msg err';current.textContent='No se pudo cargar: '+err.message}};rd.readAsArrayBuffer(file)}
 function parse(k,R){const o=[];const ref=S.ref;
@@ -1364,7 +1391,7 @@ function loadExample(k){const ref=S.ref,o=[];const mAdd=(s,n,day)=>{const d=D(s)
   if(k==='ARCA')for(let i=1;i<=12;i++){o.push({s:'ARCA',f:mAdd(ref,i-(+ref.slice(8)>16?0:1),16),m:-6400000,c:'ARS',p:'ARCA · Plan IVA (ejemplo)',doc:'Cuota '+i+'/12',cat:'Plan de pagos ARCA',ej:1})}
   if(k==='PPTO'||k==='EJC'||k==='EJP'){const base={'Cobranza clientes':9.5e9,'Cheques en cartera':6e8,'Proveedores':5.2e9,'Cheques emitidos':2.4e9,'Préstamos':1.8e8,'Leasing':1.1e8,'Plan de pagos ARCA':6.4e7,'Fondo fijo':4e7,'Retiros de socios':3e7};
     for(let i=-1;i<=2;i++){const mes=mAdd(ref,i,1).slice(0,7);if(k!=='PPTO'&&i>=0)continue;let j=0;for(const[c,v]of Object.entries(base)){j++;if(k==='EJC'&&!isIn(c)||k==='EJP'&&isIn(c))continue;const f=k!=='PPTO'?(1+((j*37%17)-8)/100):1+i*0.03;o.push({mes,cat:c,imp:Math.round(v*f),ej:1})}}}
-  clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:todayISO};save()}
+  clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:reportToday()};save()}
 
 /* ---------- shell ---------- */
 function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;saveView();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
@@ -1379,7 +1406,11 @@ function renderAll(){
   if($('#bOvr'))$('#bOvr').onclick=()=>{S.ovr={};save();renderAll()};
   if(ni){$('#exBanner').insertAdjacentHTML('beforeend',`<div class="banner"><span class="chip incc">Incobrables</span><span>${ni===1?'1 documento marcado':ni+' documentos marcados'} como incobrable${ni===1?'':'s'}. Se muestran en el flujo pero no suman a los ingresos.</span><button class="btn" id="bInc">Quitar todos</button></div>`);$('#bInc').onclick=()=>{S.inc={};save();renderAll()}}
   if($('#bAll'))$('#bAll').onclick=()=>{S.excl=[];save();renderAll()};
-  $('#sub').textContent=(S.data.CLI.at?'Saldos de Finnegans al '+fd(S.data.CLI.at):'Sin saldos de Finnegans')+' · fecha de corte '+fd(S.ref);
+  const health=sourceHealth();
+  $('#sourceBanner').innerHTML=health.issues.length?`<div class="banner" role="status"><span class="chip" style="color:var(--crit)">Revisar datos</span><span>La proyección puede estar incompleta o mezclar datos de distintas fechas. ${health.issues.length} observación${health.issues.length===1?'':'es'} en las fuentes principales.</span><button type="button" class="btn" id="sourceDetails">Ver estado de los datos</button></div>`:'';
+  if($('#sourceDetails'))$('#sourceDetails').onclick=()=>setTab('dat');
+  const cliSource=S.data.CLI;
+  $('#sub').textContent=(cliSource.at?(String(cliSource.orig||'').startsWith('Excel · ')?'Excel de Clientes cargado el ':cliSource.orig==='Datos de ejemplo'?'Datos de ejemplo al ':'Saldos de Finnegans al ')+fd(cliSource.at):'Sin saldos de Finnegans')+' · fecha de corte '+fd(S.ref);
   renderTab()}
 $('#pRef').onchange=e=>{if(e.target.value){S.ref=e.target.value;save();renderAll()}};
 $('#pTc').onchange=e=>{const v=num(e.target.value);if(v>0){S.tc=v;save()}renderAll()};
