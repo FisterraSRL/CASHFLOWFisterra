@@ -1,6 +1,6 @@
 # Cashflow Fisterra
 
-Versión **1.0.21**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.22**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
@@ -11,7 +11,7 @@ El frontend se genera como un único HTML. Las consultas a Finnegans y, cuando s
 ## Qué incluye
 
 - **Resumen**: saldo, cobros y pagos a 30 días, atrasado neto, saldo mínimo proyectado, gráfico de ingresos, egresos y saldo, alertas de vencimientos e indicadores de capital de trabajo (capital de trabajo neto, brecha financiera, liquidez corriente e inmediata, DSO, DPO, brecha de plazos y solvencia).
-- **Flujo de fondos**: por día, semana, mes o año. Cada fila se despliega por organización y por documento. Para facturas, el listado muestra el campo `Comprobante` de Finnegans; para cheques, el número de cheque. Cada documento tiene un tilde de selección. La acción general marca o desmarca como incobrables solo los cobros seleccionados. También permite excluir organizaciones y reprogramar fechas.
+- **Flujo de fondos**: por día, semana, mes o año. Los importes de tablas y calendario se muestran en pesos con dos decimales por defecto; el selector «Importes detallados» permite volver a millones y se recuerda en este navegador. En millones, los importes pequeños conservan la precisión suficiente para no aparecer como un guion. Cada fila se despliega por organización y por documento. Para facturas, el listado muestra el campo `Comprobante` de Finnegans; para cheques, el número de cheque. Cada documento tiene un tilde de selección. La acción general marca o desmarca como incobrables solo los cobros seleccionados. También permite excluir organizaciones y reprogramar fechas.
 - **Vencimientos**: calendario mensual y agenda de 14 días contados desde la fecha real de hoy en Argentina. La etiqueta «Vencido» y el resaltado de días pasados usan esa fecha, independientemente de la fecha de corte elegida para el flujo. El detalle muestra el campo `Comprobante` en facturas y el número en cheques.
 - **Ejecutado**: resultados de cobros y pagos realizados, totales, neto, cobertura, evolución mensual, análisis por categoría y registros de los reportes.
 - **Presupuesto vs real**: comparación mensual por categoría.
