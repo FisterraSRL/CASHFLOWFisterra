@@ -14,6 +14,32 @@ test('supplier URL supports dimension, value and case-sensitive document paramet
  const u=reportUrl('PRV',{fecha:'2026-10-15',dimension:'Centro',valor:'Valor 1',tipoDocumento:'FC'},'token');
  assert.equal(u.pathname,'/api/reports/composicionSaldoProveedor');assert.equal(u.searchParams.get('PARAMWEBREPORT_dimension'),'Centro');assert.equal(u.searchParams.get('PARAMWEBREPORT_valor'),'Valor 1');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoDocumento'),'FC');
 });
+test('bank URL uses the cut-off date and optional company with the exact parameter names',()=>{
+ const u=reportUrl('BCO',{fecha:'2026-11-13',empresa:'E1'},'test.token');
+ assert.equal(u.pathname,'/api/reports/SaldoCuentasBanco');
+ assert.equal(u.searchParams.get('PARAMETER_FechaCorte'),'2026-11-13');
+ assert.equal(u.searchParams.get('PARAMETER_Empresa'),'E1');
+ assert.equal(u.searchParams.get('ACCESS_TOKEN'),'test.token');
+ assert.equal(u.searchParams.has('PARAMWEBREPORT_fecha'),false);
+ assert.equal(reportUrl('BCO',{fecha:'2026-11-13'},'token').searchParams.has('PARAMETER_Empresa'),false);
+});
+test('bank balances keep account, company, original currency, zero and negative balances',()=>{
+ const out=normalizeReport('BCO',{rows:[
+  {Empresa:'Empresa A',Banco:'Banco A',CuentaBancaria:'CC 123',Moneda:'Pesos',SaldoFinal:'1.250.000,50',FechaCorte:'2026-11-13'},
+  {Empresa:'Empresa A',Banco:'Banco B',CuentaBancaria:'CC 456',Moneda:'USD',SaldoFinal:-15.25,FechaCorte:'2026-11-13'},
+  {Empresa:'Empresa B',CuentaBancaria:'CC 123',Moneda:'ARS',SaldoFinal:0,FechaCorte:'2026-11-13'}
+ ]},'2026-11-13');
+ assert.deepEqual(out.rows.map(r=>[r.company,r.account,r.c,r.m]),[['Empresa A','CC 123','ARS',1250000.5],['Empresa A','CC 456','USD',-15.25],['Empresa B','CC 123','ARS',0]]);
+ assert.equal(out.received,3);
+});
+test('bank report rejects missing fields, stale dates, duplicate accounts and partial pages',()=>{
+ const row={Empresa:'E1',Cuenta:'CC 1',Moneda:'ARS',Saldo:100,FechaCorte:'2026-11-13'};
+ for(const bad of [{Cuenta:undefined},{Moneda:undefined},{Saldo:undefined},{Saldo:'error'},{FechaCorte:'2026-11-12'}]){
+  assert.throws(()=>normalizeReport('BCO',[{...row,...bad}],'2026-11-13'),/Fila 1/);
+ }
+ assert.throws(()=>normalizeReport('BCO',[row,row],'2026-11-13'),/más de una vez/);
+ assert.throws(()=>normalizeReport('BCO',{rows:[row],totalRecords:2},'2026-11-13'),/paginado/);
+});
 test('rejects unknown source, invalid date and non-string filters',()=>{
  assert.throws(()=>reportUrl('PRE',{fecha:'2026-10-15'},'token'));
  assert.throws(()=>reportUrl('CLI',{fecha:'2026-02-31'},'token'));

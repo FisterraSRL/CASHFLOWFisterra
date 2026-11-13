@@ -2,7 +2,7 @@
 const {authorize,protectedDeployment}=require('../lib/workspace-auth.cjs');
 const {readWorkspace,writeWorkspace}=require('../lib/workspace-store.cjs');
 
-const SOURCES=new Set(['CLI','PRV','CHP','CHT','PRE','LEA','ARCA','PPTO','EJC','EJP']);
+const SOURCES=new Set(['BCO','CLI','PRV','CHP','CHT','PRE','LEA','ARCA','PPTO','EJC','EJP']);
 const MAX_BYTES=3*1024*1024;
 
 function validPayload(payload){

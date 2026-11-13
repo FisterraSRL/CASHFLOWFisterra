@@ -41,6 +41,23 @@ test('shared requests obtain fresh tokens server-side and cannot override compan
  }
  assert.deepEqual(used,['server.token.1','server.token.2']);
 }));
+test('shared bank report uses the requested cut-off date and optional server company filter',()=>configured(async()=>{
+ const before=process.env.FINNEGANS_BCO_FILTERS;
+ process.env.FINNEGANS_BCO_FILTERS=JSON.stringify({empresa:'E1'});
+ global.fetch=async url=>{
+  const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.bank.token');
+  assert.equal(u.pathname,'/api/reports/SaldoCuentasBanco');
+  assert.equal(u.searchParams.get('PARAMETER_FechaCorte'),'2026-11-10');
+  assert.equal(u.searchParams.get('PARAMETER_Empresa'),'E1');
+  return new Response(JSON.stringify([{Empresa:'E1',Cuenta:'CC 1',Moneda:'ARS',Saldo:100,FechaCorte:'2026-11-10'}]));
+ };
+ try{
+  const r=await invoke(reportHandler,{source:'BCO',shared:true,fecha:'2026-11-10',filters:{empresa:'OTHER',fecha:'2000-01-01'}});
+  assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].m,100);assert.equal(r.body.date,'2026-11-10');
+  assert.ok(!JSON.stringify(r.body).includes('server.bank.token'));
+  assert.equal((await invoke(reportHandler,{source:'BCO',shared:true,fecha:'2026-02-31'})).statusCode,400);
+ }finally{if(before===undefined)delete process.env.FINNEGANS_BCO_FILTERS;else process.env.FINNEGANS_BCO_FILTERS=before}
+}));
 test('shared connection test never returns an access token',()=>configured(async()=>{
  global.fetch=async()=>new Response('server.token');const r=await invoke(configHandler);assert.equal(r.statusCode,200);assert.deepEqual(r.body,{connected:true});
 }));

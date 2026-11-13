@@ -17,10 +17,18 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await page.evaluate(()=>{
       const today=reportToday();
       for(const key of Object.keys(S.data))S.data[key]={rows:[]};
+      S.saldo=100;S.saldoManualSet=true;S.saldoFecha=today;S.ref=today;
       for(const key of ['CLI','PRV','CHP','CHT'])S.data[key]={rows:[{id:key+'-1',s:key,f:today,m:key==='PRV'||key==='CHP'?-100:100,c:'ARS',p:'Prueba',cat:key==='CLI'?'Cobranza clientes':key==='PRV'?'Proveedores':key==='CHP'?'Cheques emitidos':'Cheques en cartera',e:'En Cartera'}],at:today,orig:'Prueba'};
       save();renderAll();
     });
     assert.equal(await page.locator('#sourceBanner').innerText(),'');
+    await page.evaluate(()=>{S.data.BCO={rows:[{id:'BCO-1',s:'BCO',account:'CC 1',bank:'Banco A',company:'E1',m:500,c:'ARS',f:S.ref}],at:S.ref,orig:'Finnegans · API'};save();renderAll()});
+    assert.equal(await page.evaluate(()=>openingBalance()),500);
+    await page.evaluate(()=>{S.ref=addD(S.ref,-1);save();renderAll()});
+    assert.equal(await page.evaluate(()=>openingBalance()),0);
+    assert.match(await page.locator('#sourceBanner').innerText(),/proyección puede estar incompleta/);
+    await page.evaluate(()=>{S.ref=reportToday();save();renderAll()});
+    assert.equal(await page.evaluate(()=>openingBalance()),500);
     await page.evaluate(()=>{S.data.CLI.orig='Excel · clientes.xlsx';renderAll()});
     assert.match(await page.locator('#sourceBanner').innerText(),/proyección puede estar incompleta/);
     assert.match(await page.locator('#sub').innerText(),/Excel de Clientes cargado/);

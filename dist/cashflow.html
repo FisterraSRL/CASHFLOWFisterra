@@ -339,7 +339,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <main class="wrap">
 <div class="params" role="region" aria-label="Parámetros">
   <div class="fld"><label for="pRef">Fecha de corte</label><input type="date" id="pRef"></div>
-  <div class="fld"><label for="pSaldo">Saldo bancos hoy ($)</label><input class="num" id="pSaldo" inputmode="decimal" placeholder="Ingresar saldo"></div>
+  <div class="fld"><label for="pSaldo">Saldo bancos al corte ($)</label><input class="num" id="pSaldo" inputmode="decimal" placeholder="Ingresar saldo"></div>
   <div class="fld"><label for="pTc">TC USD ($)</label><input class="num" id="pTc" inputmode="decimal" placeholder="Ingresar TC" style="width:100px"></div>
   <div class="fld"><label for="pHor">Horizonte</label>
     <select id="pHor"><option value="30">30 días</option><option value="90">90 días</option><option value="180">6 meses</option><option value="365">12 meses</option></select></div>
@@ -376,6 +376,7 @@ const RAW = {"ref":"2026-10-13","tc":1517,"mov":[{"s":"CLI","f":"2026-10-23","m"
 const CATS_IN=['Cobranza clientes','Cheques en cartera','Cheques depositados','Otros ingresos'];
 const CATS_OUT=['Proveedores','Cheques emitidos','Préstamos','Leasing','Plan de pagos ARCA','Fondo fijo','Retiros de socios','Otras deudas'];
 const SRC={
+  BCO:{n:'Saldo de bancos',d:'Saldos por cuenta bancaria a la fecha de corte (Finnegans).',fin:true,bank:true},
   CLI:{n:'Clientes',d:'Saldos de deudores por ventas (Finnegans).',fin:true,req:['cliente','importe ppal','fecha comprobante','dias de mora']},
   PRV:{n:'Proveedores',d:'Saldos de proveedores, leasing, fondo fijo y socios (Finnegans).',fin:true,req:['proveedor','importe ppal','moneda','fecha de vencimiento actual']},
   CHP:{n:'Cheques propios',d:'Cheques diferidos emitidos (Finnegans).',fin:true,req:['razonsocial','fecha de vto','imp moneda trans','estado']},
@@ -394,6 +395,7 @@ try{const saved=localStorage.getItem(AMOUNT_UNIT_KEY);if(saved==='M'||saved==='A
 const todayISO=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
 let S={ref:RAW.ref>todayISO?RAW.ref:todayISO,tc:RAW.tc,fx:{},saldo:0,hor:90,gran:'S',incChq:false,tab:'res',calM:null,calF:'all',pptM:null,data:null};
 function freshData(){const at=RAW.mov.length||RAW.cartera.length?RAW.ref:null;return{
+  BCO:{rows:[]},
   CLI:{rows:RAW.mov.filter(r=>r.s==='CLI'),orig:at?'Finnegans · Excel':null,at},
   PRV:{rows:RAW.mov.filter(r=>r.s==='PRV'),orig:at?'Finnegans · Excel':null,at},
   CHP:{rows:RAW.mov.filter(r=>r.s==='CHP'),orig:at?'Finnegans · Excel':null,at},
@@ -419,7 +421,7 @@ function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage
 function saveView(){if(WORKSPACE.mode==='local')save()}
 function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
 function workspacePayload(){
-  const keys=['ref','tc','fx','saldo','hor','gran','incChq','bal','excl','ovr','inc','data'];
+  const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','ovr','inc','data'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
   return {version:1,state,filters,...(WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
@@ -470,6 +472,7 @@ async function loadWorkspace(){
     if(!result.payload){showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
     if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
     Object.assign(S,result.payload.state);
+    for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
     if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
     WORKSPACE.vault=result.payload.vault||null;
     for(const [k,filters]of Object.entries(result.payload.filters||{}))if(REPORT_STATE[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...filters};
@@ -478,7 +481,7 @@ async function loadWorkspace(){
 }
 async function initializeWorkspace(empty){
   const previous=empty?JSON.stringify(S):null;
-  if(empty){S.data=emptyData();S.ovr={};S.inc={};S.excl=[];S.saldo=0;S.ref=reportToday();S.bal={}}
+  if(empty){S.data=emptyData();S.ovr={};S.inc={};S.excl=[];S.saldo=0;S.saldoManualSet=false;S.saldoFecha=null;S.ref=reportToday();S.bal={}}
   $('#workspaceImport').disabled=$('#workspaceEmpty').disabled=true;
   $('#workspaceGateText').textContent='Guardando los datos iniciales…';
   try{
@@ -514,6 +517,12 @@ const missingFx=rows=>[...new Set(rows.map(r=>r.c).filter(c=>c&&c!=='ARS'&&!(rat
 const loadedMovements=()=>Object.values(S.data).flatMap(d=>d.rows||[]).filter(r=>r.c&&Number.isFinite(r.m));
 const ars=r=>r.m*rateFor(r.c||'ARS');
 const isIn=cat=>CATS_IN.includes(cat);
+function bankBalance(){
+  const d=S.data.BCO;
+  if(!d?.rows?.length||d.at!==S.ref||missingFx(d.rows).length)return null;
+  return{value:d.rows.reduce((total,row)=>total+ars(row),0),date:d.at,count:d.rows.length};
+}
+const openingBalance=()=>bankBalance()?.value??(S.saldoFecha===S.ref?S.saldo:0);
 
 /* ---------- movimientos ---------- */
 function chtFlow(r){
@@ -555,7 +564,7 @@ function buildFlow(){
   for(const cat of [...CATS_IN,...CATS_OUT])rows[cat]={};
   for(const r of flowMovs()){const b=bucket(r),v=ars(r);const cell=(rows[r.cat]||(rows[r.cat]={}));(cell[b]||(cell[b]={v:0,items:[]}));cell[b].v+=v;cell[b].items.push(r);
     if(isIn(r.cat))M[b].in+=v;else M[b].out+=v}
-  let s=S.saldo;const sal={};for(const c of cols){M[c].ini=s;s+=M[c].in+M[c].out;sal[c]=s}
+  let s=openingBalance();const sal={};for(const c of cols){M[c].ini=s;s+=M[c].in+M[c].out;sal[c]=s}
   return{P,cols,M,rows,sal}}
 
 /* ---------- drawer ---------- */
@@ -584,7 +593,7 @@ function liHTML(r){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportT
 function calcIdx(F,mv){
   const B=S.bal||{},lim=addD(S.ref,365),cur=mv.filter(r=>r.f<=lim),d30=addD(S.ref,30);
   let cob=0,pag=0,pag30=0;for(const r of cur){const v=ars(r);if(isIn(r.cat))cob+=v;else{pag-=v;if(r.f<=d30)pag30-=v}}
-  const ctn=S.saldo+cob-pag,liq=pag>0?(S.saldo+cob)/pag:null,liqI=pag30>0?S.saldo/pag30:null;
+  const initial=openingBalance(),ctn=initial+cob-pag,liq=pag>0?(initial+cob)/pag:null,liqI=pag30>0?initial/pag30:null;
   let mn=Infinity,mk=null,neg=0;for(const c of F.cols){if(c==='POST')continue;const v=F.sal[c];if(v<mn){mn=v;mk=c}if(v<0)neg++}
   const dd=(a,b)=>(D(a)-D(b))/864e5;
   const wavg=L=>{let w=0,t=0;for(const[x,v]of L){w+=Math.abs(v);t+=x*Math.abs(v)}return w?t/w:null};
@@ -605,7 +614,7 @@ function idxHTML(I){
   const dn=v=>v==null?'s/d':nf0.format(v)+' días',x=v=>v==null?'s/d':nf1.format(v)+' x';
   const per=c=>c==='ATR'?'al cancelar atrasados':'en '+plabel(c);
   const T=[
-   ['Capital de trabajo neto',$M(I.ctn),I.ctn<0?st('crit','Negativo'):st('good','Positivo'),`Caja ${$M(S.saldo)} + a cobrar ${$M(I.cob)} − a pagar ${$M(I.pag)}, próximos 12 meses`],
+   ['Capital de trabajo neto',$M(I.ctn),I.ctn<0?st('crit','Negativo'):st('good','Positivo'),`Caja ${$M(openingBalance())} + a cobrar ${$M(I.cob)} − a pagar ${$M(I.pag)}, próximos 12 meses`],
    ['Brecha financiera',$M(-I.need),I.need?st('crit','Requiere fondos'):st('good','Cubierta'),I.need?`Mayor necesidad ${per(I.mk)}; ${I.neg} período${I.neg===1?'':'s'} con saldo negativo en ${S.hor} días`:`El saldo proyectado no queda negativo en ${S.hor} días`],
    ['Liquidez corriente',x(I.liq),I.liq==null?'':I.liq<1?st('crit','Menor a 1'):I.liq<1.5?st('warn','Ajustada'):st('good','Holgada'),'(Caja + a cobrar) ÷ a pagar a 12 meses. Sin inventarios equivale a la prueba ácida'],
    ['Liquidez inmediata',x(I.liqI),I.liqI==null?'':I.liqI<0.5?st('crit','Baja'):I.liqI<1?st('warn','Parcial'):st('good','Cubre'),`Caja ÷ pagos vencidos y de los próximos 30 días (${$M(I.pag30)})`],
@@ -628,7 +637,7 @@ function renderRes(){
   let mn=Infinity,mk=null;for(const c of F.cols){if(c==='POST')continue;if(F.sal[c]<mn){mn=F.sal[c];mk=c}}
   const v=$('#v-res');
   v.innerHTML=`<div class="kpis">
-   <div class="kpi"><div class="l">Saldo bancos hoy</div><div class="v">${$M(S.saldo)}</div><div class="s">${S.saldo?'Al '+fd(ref):'<span style="color:var(--crit)">Ingresá el saldo arriba</span>'}</div></div>
+   <div class="kpi"><div class="l">Saldo bancos al corte</div><div class="v">${$M(openingBalance())}</div><div class="s">${bankBalance()?`Finnegans · ${bankBalance().count} cuenta${bankBalance().count===1?'':'s'} al ${fd(ref)}`:S.saldoFecha===S.ref&&(S.saldoManualSet||S.saldo)?'Saldo manual al '+fd(S.ref):'<span style="color:var(--crit)">Ingresá el saldo al corte o consultá la API</span>'}</div></div>
    <div class="kpi"><div class="l">Cobros próximos 30 días</div><div class="v pos">${$M(cob30)}</div><div class="s">Clientes y cheques de terceros</div></div>
    <div class="kpi"><div class="l">Pagos próximos 30 días</div><div class="v neg">${$M(pag30)}</div><div class="s">Proveedores, cheques, deudas</div></div>
    <div class="kpi"><div class="l">Atrasado neto</div><div class="v ${atrIn+atrOut<0?'neg':'pos'}">${$M(atrIn+atrOut)}</div><div class="s">A cobrar ${$M(atrIn)} · a pagar ${$M(-atrOut)}</div></div>
@@ -668,7 +677,7 @@ function renderAlerts(mv){
 function drawChart(F){
   const host=$('#chart');const cols=F.cols.filter(c=>c!=='POST');
   const W=Math.max(320,host.clientWidth||700),H=280,pl=52,pr=10,pt=10,pb=34;
-  const vals=cols.flatMap(c=>[F.M[c].in,F.M[c].out,F.sal[c]]).concat([0,S.saldo]);
+  const vals=cols.flatMap(c=>[F.M[c].in,F.M[c].out,F.sal[c]]).concat([0,openingBalance()]);
   let lo=Math.min(...vals),hi=Math.max(...vals);const pad=(hi-lo)*.06||1;lo-=pad;hi+=pad;
   const nice=x=>{const e=Math.pow(10,Math.floor(Math.log10(x)));return [1,2,2.5,5,10].map(m=>m*e).find(m=>m>=x)};
   const step=nice((hi-lo)/5);lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
@@ -683,7 +692,7 @@ function drawChart(F){
     if(m.out<0)g+=`<rect x="${cx+1}" y="${y(0)}" width="${bar}" height="${Math.max(0,y(m.out)-y(0))}" rx="2" fill="var(--out)"/>`;
     if(i%every===0)g+=`<text x="${cx}" y="${H-pb+16}" text-anchor="middle">${c==='ATR'?'Atrasado':esc(plabel(c))}</text>`});
   const pts=cols.map((c,i)=>[x(i)+bw/2,y(F.sal[c])]);
-  g+=`<polyline points="${[[pl,y(S.saldo)],...pts].map(p=>p.join(',')).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>`;
+  g+=`<polyline points="${[[pl,y(openingBalance())],...pts].map(p=>p.join(',')).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>`;
   const last=pts[pts.length-1];g+=`<circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--ink)" stroke="var(--panel)" stroke-width="2"/>`;
   g+=`<line id="xh" x1="0" x2="0" y1="${pt}" y2="${H-pb}" stroke="var(--ink2)" stroke-width="1" visibility="hidden"/>`;
   cols.forEach((c,i)=>g+=`<rect class="hit" data-i="${i}" x="${x(i)}" y="${pt}" width="${bw}" height="${H-pt-pb}" fill="transparent" style="cursor:pointer"/>`);
@@ -1061,7 +1070,7 @@ async function restoreCredentials(){
     }
   }catch{credentialMessage('No se pudieron recuperar las credenciales guardadas. Ingresalas nuevamente para guardarlas.',true)}
 }
-const REPORT_FIELDS={CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
+const REPORT_FIELDS={BCO:[['empresa','Empresa / sucursal']],CLI:[['organizacion','Cliente'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['moneda','Moneda'],['empresa','Empresa']],PRV:[['organizacion','Proveedor'],['circuitocontable','Circuito contable'],['cuenta','Cuenta'],['dimension','Dimensión'],['valor','Valor de dimensión'],['moneda','Moneda'],['empresa','Empresa'],['tipoDocumento','Tipo de documento']],CHP:[['estado','Estado'],['organizacion','Tercero'],['circuitocontable','Circuito contable'],['cuenta','Cuenta contable'],['empresa','Empresa / sucursal'],['fechaVencimientoDesde','Vencimiento desde'],['fechaVencimientoHasta','Vencimiento hasta'],['mostrarSoloNoConciliados','Mostrar solo no conciliados']]};
 REPORT_FIELDS.CHT=REPORT_FIELDS.CHP.map(field=>[...field]);
 REPORT_FIELDS.EJC=[['fechaDesde','Fecha desde'],['transaccionSubtipoID','Tipo de documento (ID)'],['circuitocontable','Circuito contable'],['detallarAplicacion','Detallar aplicación'],['cliente','Cliente'],['empresa','Empresa / sucursal']];
 REPORT_FIELDS.EJP=REPORT_FIELDS.EJC.map(([field,label])=>field==='cliente'?['proveedor','Proveedor']:[field,label]);
@@ -1099,6 +1108,13 @@ function sourceHealth(){
     else if(!(last?.status==='empty'&&checkedAt===today))issues.push(SRC[k].n+': sin carga vigente');
   }
   if(dates.size>1)issues.unshift('Las fuentes del flujo tienen fechas diferentes');
+  const bank=S.data.BCO||{rows:[]};
+  if(bank.rows.length){
+    if(bank.at!==S.ref)issues.unshift('Saldo bancario al '+(bank.at?fd(bank.at):'fecha desconocida')+' distinto de la fecha de corte '+fd(S.ref));
+    else if(missingFx(bank.rows).length)issues.unshift('Faltan cotizaciones para el saldo bancario: '+missingFx(bank.rows).join(', '));
+    if(bank.lastCheck?.status==='error'||bank.lastCheck?.status==='empty')issues.unshift('La última consulta del saldo bancario no actualizó los datos');
+  }else if(!(S.saldoManualSet||S.saldo))issues.unshift('Falta el saldo bancario inicial');
+  else if(S.saldoFecha!==S.ref)issues.unshift('El saldo bancario manual no tiene fecha confirmada para el corte '+fd(S.ref));
   return{rows,issues,today};
 }
 function sourceHealthSection(){
@@ -1145,7 +1161,7 @@ function workspaceSection(){
   const when=WORKSPACE.updatedAt?new Date(WORKSPACE.updatedAt).toLocaleString('es-AR'):'recién iniciado';
   return `<div class="card api-card"><div class="toolbar"><div><h2>Datos compartidos</h2><p class="sub">Parámetros, cargas, resultados y escenarios de esta instalación.</p></div><span class="api-status active">Conectado</span></div><p class="note">Último guardado: <span id="workspaceSavedAt">${esc(when)}</span>. Los cambios se guardan automáticamente. Finnegans solo se consulta al pulsar Obtener por API o Actualizar APIs.</p><div class="api-actions"><button type="button" class="btn" id="workspaceSaveNow">Guardar ahora</button><button type="button" class="btn" id="workspaceSignOut">Cerrar acceso en este navegador</button></div></div>`;
 }
-function syncReportDates(){document.querySelectorAll('[data-filter="fecha"]').forEach(input=>{input.value=reportToday()})}
+function syncReportDates(){document.querySelectorAll('[data-filter="fecha"]').forEach(input=>{input.value=input.dataset.report==='BCO'?S.ref:reportToday()})}
 function reportDiagnosticsHTML(k){
   const state=REPORT_STATE[k],d=state?.diagnostics;if(!d)return '';
   let response=d.responseBody;try{response=JSON.stringify(JSON.parse(response),null,2)}catch{/* Keep truncated or non-JSON responses as text. */}
@@ -1161,22 +1177,22 @@ function reportDiagnosticsHTML(k){
 function reportOptions(k){
   if(!REPORT_FIELDS[k])return '';
   const cheque=k==='CHP'||k==='CHT';
-  const title=k==='EJC'?'Parámetros de cobranza':k==='EJP'?'Parámetros de pagos':cheque?(k==='CHP'?'Parámetros de cheques propios':'Parámetros de cheques de terceros'):'Parámetros de composición de saldos';
+  const title=k==='BCO'?'Parámetros de saldo bancario':k==='EJC'?'Parámetros de cobranza':k==='EJP'?'Parámetros de pagos':cheque?(k==='CHP'?'Parámetros de cheques propios':'Parámetros de cheques de terceros'):'Parámetros de composición de saldos';
   const chequeNote=cheque?`<p class="note">Tipo de cheque fijo: ${k==='CHT'?'De tercero (TipoCheque = 1)':'Propio (TipoCheque = 0)'}. Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Los cheques marcados como conciliados se conservan en la carga, pero se excluyen del flujo y las alertas.${k==='CHT'?' Solo se proyectan los valores disponibles según su estado y cuenta; los endosados y descontados no generan un nuevo cobro.':''}</p>`:'';
-  if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} La fecha del reporte siempre es hoy (hora de Argentina).</p>${chequeNote}</details>`;
-  const r=REPORT_STATE[k],fields=[['fecha',cheque||k==='EJC'||k==='EJP'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
+  if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} ${k==='BCO'?'La fecha del saldo es la fecha de corte seleccionada arriba.':'La fecha del reporte siempre es hoy (hora de Argentina).'}</p>${chequeNote}</details>`;
+  const r=REPORT_STATE[k],fields=[['fecha',k==='BCO'?'Fecha de corte (arriba)':cheque||k==='EJC'||k==='EJP'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
   const control=(key)=>{
     const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy||API_BATCH.busy?' disabled':''}`;
     if(key==='mostrarSoloNoConciliados'||key==='detallarAplicacion'){const value=r.filters[key]||(key==='detallarAplicacion'?'true':'false');return `<select ${attrs}><option value="false"${value==='false'?' selected':''}>No</option><option value="true"${value==='true'?' selected':''}>Sí</option></select>`}
     const dateField=key==='fecha'||key==='fechaDesde'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
-    return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?reportToday():r.filters[key]||'')}"${key==='fecha'?' readonly aria-description="Se actualiza automáticamente al día de hoy, hora de Argentina"':dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
+    return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?(k==='BCO'?S.ref:reportToday()):r.filters[key]||'')}"${key==='fecha'?` readonly aria-description="${k==='BCO'?'Se toma de la fecha de corte seleccionada arriba':'Se actualiza automáticamente al día de hoy, hora de Argentina'}"`:dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
   };
-  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente${WORKSPACE.mode==='ready'?' para esta instalación':' en este navegador'}. La fecha de consulta siempre es hoy (hora de Argentina). Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
+  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente${WORKSPACE.mode==='ready'?' para esta instalación':' en este navegador'}. ${k==='BCO'?'La fecha del saldo se toma de la fecha de corte seleccionada arriba.':'La fecha de consulta siempre es hoy (hora de Argentina).'} Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return {status:'skipped'};
   const shared=SHARED.enabled&&!!SHARED.sources[k];
-  const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:reportToday()};
+  const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:k==='BCO'?S.ref:reportToday()};
   if(k==='EJC'||k==='EJP'){filters.fechaDesde=filters.fechaDesde||filters.fecha.slice(0,7)+'-01';filters.detallarAplicacion=filters.detallarAplicacion||'true'}
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
@@ -1186,9 +1202,9 @@ async function obtainReport(k){
   try{
     const token=shared?null:await currentFinnegansToken();
     tokenReady=true;
-    filters.fecha=reportToday();
-    state.message=k==='EJC'?'Consultando análisis de cobranza en Finnegans…':k==='EJP'?'Consultando análisis de órdenes de pago en Finnegans…':k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
-    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
+    filters.fecha=k==='BCO'?S.ref:reportToday();
+    state.message=k==='BCO'?'Consultando saldo de bancos en Finnegans…':k==='EJC'?'Consultando análisis de cobranza en Finnegans…':k==='EJP'?'Consultando análisis de órdenes de pago en Finnegans…':k==='CHP'||k==='CHT'?'Consultando situación de '+SRC[k].n.toLowerCase()+' en Finnegans…':'Consultando composición de saldos en Finnegans…';if(S.tab==='dat')renderDat();
+    const response=await fetch('/api/finnegans-report',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify(shared?{source:k,shared:true,...(k==='BCO'?{fecha:filters.fecha}:{})}:{source:k,access_token:token,filters}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
     const data=await response.json().catch(()=>null);
     if(data?.diagnostics)state.diagnostics=data.diagnostics;
     if(!response.ok){
@@ -1273,19 +1289,20 @@ function renderDat(){
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
     ${d.filters?`<div class="note">Filtros de la carga: ${esc(Object.entries(d.filters).filter(([key,value])=>key!=='fecha'&&value).map(([key,value])=>((REPORT_FIELDS[k]||[]).find(([f])=>f===key)||[key,key])[1]+': '+value).join(' · ')||'sin filtros adicionales')}</div>`:''}
-    ${s.tpl?`<div><span class="note">Columnas de la plantilla:</span><br>${s.tpl.map(c=>`<code>${c}</code>`).join('')}</div>`:`<div class="note">Usá el mismo listado exportado de Finnegans. Columnas clave: ${s.req.map(c=>`<code>${c}</code>`).join('')}</div>`}
+    ${s.bank?`<p class="note">Se consulta a la fecha de corte seleccionada arriba. El total se usa como saldo inicial solo si coincide con esa fecha y están cargadas las cotizaciones necesarias. El saldo es el informado por Finnegans; la conciliación bancaria debe verificarse por separado.</p>${n?`<div class="tblwrap"><table><thead><tr><th>Banco y cuenta</th><th>Empresa</th><th>Moneda</th><th>Saldo original</th><th>Saldo en pesos</th></tr></thead><tbody>${d.rows.map(r=>`<tr><td>${esc([r.bank,r.account].filter(Boolean).join(' · ')||'Sin cuenta')}</td><td>${esc(r.company||'–')}</td><td>${esc(r.c)}</td><td>${nf2.format(r.m)}</td><td>${$f2(ars(r))}</td></tr>`).join('')}</tbody></table></div>`:''}`:s.tpl?`<div><span class="note">Columnas de la plantilla:</span><br>${s.tpl.map(c=>`<code>${c}</code>`).join('')}</div>`:`<div class="note">Usá el mismo listado exportado de Finnegans. Columnas clave: ${s.req.map(c=>`<code>${c}</code>`).join('')}</div>`}
     ${reportOptions(k)}
-    <div class="act"><label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"${REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}></label>
+    <div class="act">${s.bank?'':`<label class="btn pri">Subir Excel<input type="file" accept=".xlsx,.xls,.csv" data-k="${k}"${REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}></label>`}
     <button type="button" class="btn" data-api="${k}" aria-label="Obtener ${esc(s.n)} por API"${REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}>${REPORT_STATE[k]?.busy?'Consultando…':'Obtener por API'}</button>
     <button type="button" class="btn" data-clr="${k}"${!n||REPORT_STATE[k]?.busy||API_BATCH.busy?' disabled':''}${!n?' title="No hay datos para quitar"':''}>Quitar</button></div>
     ${s.tpl?`<div class="actaux"><button class="btn" data-copy="${k}">Copiar encabezados</button><button class="btn" data-ex="${k}">Cargar ejemplo</button>${k==='EJC'||k==='EJP'?'<button class="btn" data-exec-results>Ver resultados</button>':''}</div>`:''}
     <div class="msg${REPORT_STATE[k]?.error?' err':''}" id="msg-${k}" role="status" aria-live="polite">${esc(REPORT_STATE[k]?.message||'')}</div>${reportDiagnosticsHTML(k)}</div>`}).join('')}</div>
-  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Clientes, proveedores, cheques, cobros y pagos ejecutados: API disponible · otras fuentes: Excel o integración pendiente</p>
+  <div class="card" style="margin-top:16px"><h2>Integraciones con Finnegans</h2><p class="sub">Saldos bancarios, clientes, proveedores, cheques, cobros y pagos ejecutados: API disponible · otras fuentes: Excel o integración pendiente</p>
   <div class="prose"><p>Clientes y Proveedores consultan composición de saldos. Cheques propios y de terceros consultan situación de cheques con TipoCheque fijo: 0 (Propio) y 1 (De tercero), respectivamente. El resto de las integraciones se incorporará por fuente:</p>
   <ul><li><b>Clientes y Proveedores</b>: composición de saldos de cuenta corriente con fecha de vencimiento, moneda y condición de pago.</li>
   <li><b>Cheques propios y de terceros</b>: cartera de valores con estado, cuenta bancaria y fecha de vencimiento.</li>
   <li><b>Préstamos, leasing y planes ARCA</b>: los que estén registrados en Finnegans vienen del DW; el resto sigue por plantilla Excel.</li>
-  <li><b>Cobros ejecutados, pagos ejecutados y saldos bancarios</b>: movimientos reales de tesorería por tipo y saldo de cada cuenta al cierre del día anterior.</li></ul>
+  <li><b>Cobros y pagos ejecutados</b>: movimientos reales de tesorería por tipo.</li>
+  <li><b>Saldo de bancos</b>: saldo de cada cuenta a la fecha de corte seleccionada.</li></ul>
   <p>Las consultas a Finnegans se ejecutan solo al seleccionar Obtener por API o Actualizar APIs. La conexión al datawarehouse sigue pendiente.</p></div>
   <div style="margin-top:10px"><button class="btn" id="resetAll">Restablecer los datos originales</button> <span class="msg" id="msg-reset"></span></div></div>`;
   if($('#finnegansForm')){
@@ -1398,7 +1415,7 @@ function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredential
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
 function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat})[S.tab]()}
 function renderAll(){
-  $('#pRef').value=S.ref;$('#pTc').value=S.tc>0?nf1.format(S.tc):'';$('#pSaldo').value=S.saldo?nf0.format(S.saldo):'';$('#pHor').value=S.hor;$('#pAmounts').value=AMOUNT_UNIT;$('#pChq').checked=S.incChq;
+  const bank=bankBalance();$('#pRef').value=S.ref;$('#pTc').value=S.tc>0?nf1.format(S.tc):'';$('#pSaldo').value=bank?nf0.format(bank.value):S.saldoFecha===S.ref&&(S.saldoManualSet||S.saldo)?nf0.format(S.saldo):'';$('#pSaldo').disabled=!!bank;$('#pSaldo').title=bank?'Saldo tomado de Finnegans al '+fd(bank.date):'Ingresá el saldo correspondiente a la fecha de corte';$('#pHor').value=S.hor;$('#pAmounts').value=AMOUNT_UNIT;$('#pChq').checked=S.incChq;
   document.querySelectorAll('#pGran button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===S.gran));
   const ex=Object.entries(S.data).filter(([k,d])=>d.rows.some(r=>r.ej)).map(([k])=>SRC[k].n);
   const nx=(S.excl||[]).length,no=Object.keys(S.ovr||{}).length,ni=Object.keys(S.inc||{}).length;
@@ -1414,7 +1431,7 @@ function renderAll(){
   renderTab()}
 $('#pRef').onchange=e=>{if(e.target.value){S.ref=e.target.value;save();renderAll()}};
 $('#pTc').onchange=e=>{const v=num(e.target.value);if(v>0){S.tc=v;save()}renderAll()};
-$('#pSaldo').onchange=e=>{S.saldo=num(e.target.value);save();renderAll()};
+$('#pSaldo').onchange=e=>{S.saldo=num(e.target.value);S.saldoManualSet=e.target.value.trim()!=='';S.saldoFecha=S.ref;save();renderAll()};
 $('#pHor').onchange=e=>{S.hor=+e.target.value;save();renderAll()};
 $('#pAmounts').onchange=e=>{AMOUNT_UNIT=['ARS','ARS0','M'].includes(e.target.value)?e.target.value:'ARS';try{localStorage.setItem(AMOUNT_UNIT_KEY,AMOUNT_UNIT)}catch{}renderAll()};
 $('#pChq').onchange=e=>{S.incChq=e.target.checked;save();renderAll()};
