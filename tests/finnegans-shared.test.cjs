@@ -22,6 +22,12 @@ test('missing credentials disable shared mode; incomplete scope disables the sou
  process.env.FINNEGANS_CLI_FILTERS='{}';assert.equal(sharedConfig().sources.CLI,undefined);
  process.env.FINNEGANS_CLI_FILTERS='invalid JSON';assert.equal(sharedConfig().sources.CLI,undefined);
 },{FINNEGANS_CLIENT_SECRET:''}));
+test('bank company can be supplied as a non-secret default without server credentials',()=>configured(async()=>{
+ const config=sharedConfig();
+ assert.equal(config.enabled,false);
+ assert.deepEqual(config.defaults.BCO,{empresa:'EMPRE01'});
+ assert.equal(config.sources.BCO,undefined);
+},{FINNEGANS_CLIENT_SECRET:'',FINNEGANS_BCO_FILTERS:'{"empresa":"EMPRE01"}'}));
 test('shared requests obtain fresh tokens server-side and cannot override company/account/date',()=>configured(async()=>{
  let count=0;const used=[];
  global.fetch=async(url,options)=>{

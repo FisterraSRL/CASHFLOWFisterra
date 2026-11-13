@@ -5,7 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const html=fs.readFileSync('dist/cashflow.html');
   const server=http.createServer((req,res)=>{
     if(req.url==='/api/workspace'){res.setHeader('Content-Type','application/json');return res.end('{"mode":"local"}')}
-    if(req.url==='/api/finnegans-config'){res.setHeader('Content-Type','application/json');return res.end('{"enabled":false,"sources":{}}')}
+    if(req.url==='/api/finnegans-config'){res.setHeader('Content-Type','application/json');return res.end('{"enabled":false,"sources":{},"defaults":{"BCO":{"empresa":"EMPRE01"}}}')}
     res.setHeader('Content-Type','text/html;charset=utf-8');res.end(html);
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -14,6 +14,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     const page=await browser.newPage(),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await page.waitForFunction(()=>REPORT_STATE.BCO.filters.empresa==='EMPRE01');
     await page.evaluate(()=>{
       const today=reportToday();
       for(const key of Object.keys(S.data))S.data[key]={rows:[]};

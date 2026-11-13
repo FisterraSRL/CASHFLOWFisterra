@@ -124,7 +124,7 @@ Para que un navegador nuevo pueda consultar clientes y proveedores sin volver a 
 | --- | --- |
 | `FINNEGANS_CLIENT_ID` | Client_ID del usuario de integración |
 | `FINNEGANS_CLIENT_SECRET` | Client_Secret / SECRET_KEY del mismo usuario |
-| `FINNEGANS_BCO_FILTERS` | `{"empresa":"EMPRE01"}` para consultar los saldos bancarios de esa empresa |
+| `FINNEGANS_BCO_FILTERS` | `{"empresa":"EMPRE01"}`: filtro fijo con credenciales compartidas, o valor inicial de la pastilla cuando las credenciales están cifradas en la app |
 | `FINNEGANS_CLI_FILTERS` | `{"empresa":"EMPRE01","cuenta":"DxVta","moneda":"PES"}` |
 | `FINNEGANS_PRV_FILTERS` | `{"empresa":"EMPRE01","cuenta":"2.1.1/01/01","moneda":"PES"}` |
 | `FINNEGANS_EJC_FILTERS` | `{"empresa":"EMPRE01","detallarAplicacion":"true"}` |
@@ -154,7 +154,7 @@ Clientes y Proveedores consultan `composicionSaldoCliente` y `composicionSaldoPr
 
 ### Saldo de bancos por API
 
-La pastilla **Saldo de bancos** consulta `SaldoCuentasBanco` con `PARAMETER_FechaCorte` igual a la fecha de corte de la pantalla y `PARAMETER_Empresa` con el código de empresa. En instalaciones con credenciales compartidas de Finnegans requiere `FINNEGANS_BCO_FILTERS`; en la conexión local se configura en la pastilla. La app muestra banco, cuenta, empresa, moneda y saldo original por fila. Convierte cada moneda con la cotización configurada y suma esos saldos como saldo inicial del flujo. Si cambia la fecha de corte, el saldo API anterior deja de ser saldo inicial hasta consultar de nuevo. Se puede usar un saldo manual para la nueva fecha. La actualización se ejecuta solo al pulsar **Obtener por API** o **Actualizar APIs**.
+La pastilla **Saldo de bancos** consulta `SaldoCuentasBanco` con `PARAMETER_FechaCorte` igual a la fecha de corte de la pantalla y `PARAMETER_Empresa` con el código de empresa. En instalaciones con credenciales compartidas de Finnegans requiere `FINNEGANS_BCO_FILTERS`; cuando las credenciales están cifradas en la app, esa variable aporta el código inicial y el usuario puede editarlo en la pastilla. La app muestra banco, cuenta, empresa, moneda y saldo original por fila. Convierte cada moneda con la cotización configurada y suma esos saldos como saldo inicial del flujo. Si cambia la fecha de corte, el saldo API anterior deja de ser saldo inicial hasta consultar de nuevo. Se puede usar un saldo manual para la nueva fecha. La actualización se ejecuta solo al pulsar **Obtener por API** o **Actualizar APIs**.
 
 La respuesta real de Fisterra usa `EMPRESA`, `CUENTAID`, `CUENTA`, `BANCO` y `SALDOCUENTA`; no incluye una columna de moneda. El importador reconoce el símbolo `$` de las cuentas en pesos, `U$S`/`USD` y códigos explícitos de otras monedas en el nombre de cuenta. Si no puede identificar la moneda, detiene la carga para evitar una suma incorrecta. También rechaza fechas distintas del corte, cuentas duplicadas y respuestas paginadas. Una respuesta inválida conserva los datos anteriores y permite consultar el diagnóstico. La API proporciona el saldo registrado en Finnegans; la conciliación con extractos bancarios requiere otro dato o control.
 

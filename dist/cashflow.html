@@ -1015,6 +1015,10 @@ async function restoreSharedConnection(){
   try{
     const response=await fetch('/api/finnegans-config',{headers:workspaceHeaders(),cache:'no-store',signal:AbortSignal.timeout(10000)});
     if(!response.ok)return;const config=await response.json();
+    if(!REPORT_STATE.BCO.filters.empresa&&typeof config.defaults?.BCO?.empresa==='string'&&config.defaults.BCO.empresa){
+      REPORT_STATE.BCO.filters.empresa=config.defaults.BCO.empresa;
+      persistReportFilters();renderAll();
+    }
     if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
     SHARED.enabled=true;SHARED.sources=config.sources;
     for(const k of Object.keys(REPORT_FIELDS))if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
