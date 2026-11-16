@@ -14,6 +14,16 @@ test('treasury payment means total once, including withholdings; undated APL joi
  assert.equal(out.summary.total,1100);assert.equal(out.summary.withholdings,100);assert.equal(out.rows.length,2);assert.equal(out.applications.length,1);assert.equal(out.applications[0].f,'2026-10-05');assert.equal(out.applications[0].documentDate,'2026-08-10');assert.equal(out.applications[0].mes,'2026-10');assert.equal(out.rows[0].s,'EJP');assert.match(out.rows[0].id,/^EJP-/);assert.equal(out.rows[0].cat,'Proveedores');assert.equal(out.rows[0].imp,1000);assert.deepEqual(out.period,{from:'2026-10-01',to:'2026-11-10'});
  assert.ok(out.warnings.some(w=>/fecha\(s\) de aplicación/.test(w)));
 });
+test('payment report uses FECHACOBRANZA on both OPT and APL when FECHA differs',()=>{
+ const order=fixture({FECHA:'02-11-2026',FECHACOBRANZA:'03-11-2026'});
+ const application=fixture({TIPOOP:'APL',FECHA:'13-05-2026',FECHACOBRANZA:'03-11-2026',IMPORTE:null,CUENTA:null,IMPORTEAPLICADO:1000,DOCUMENTOAPLICADO:'FC - 9160'});
+ const out=normalizeReport('EJP',[application,order],'2026-11-16',{fechaDesde:'2026-11-01'});
+ assert.equal(out.rows[0].f,'2026-11-03');
+ assert.equal(out.applications[0].f,'2026-11-03');
+ assert.equal(out.applications[0].documentDate,'2026-05-13');
+ assert.equal(out.summary.total,1000);
+ assert.throws(()=>normalizeReport('EJP',[{...application,FECHACOBRANZA:'04-11-2026'},order],'2026-11-16',{fechaDesde:'2026-11-01'}),/no coincide/);
+});
 test('payment application cannot use an invoice date or an ambiguous/foreign order',()=>{
  const apl=fixture({TIPOOP:'APL',CUENTA:null,IMPORTE:null,IMPORTEAPLICADO:1000,FECHA:'01-01-2020'}),from={fechaDesde:'2026-10-01'};
  assert.throws(()=>normalizeReport('EJP',[apl],'2026-11-10',from),/fecha de pago/);
