@@ -55,7 +55,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await page.locator('#drawerHost input.dch2[data-id="PRV-with-id"]').fill('2026-11-27');
     await page.locator('#drawerHost input.dch2[data-id="PRV-with-id"]').dispatchEvent('change');
     assert.deepEqual(await page.evaluate(()=>Object.keys(S.ovr).sort()),['CLI-with-id','PRV-with-id']);
+    assert.deepEqual(await page.evaluate(()=>Object.values(S.dateChanges).map(r=>[r.source,r.asientoItemId,r.date]).sort()),[
+      ['CLI',1369927,'2026-11-25'],['PRV',1369953,'2026-11-27']
+    ]);
+    await page.reload();
+    await page.waitForFunction(()=>document.body.className==='workspace-ready');
+    assert.deepEqual(await page.evaluate(()=>Object.keys(S.dateChanges).sort()),['CLI|1369927','PRV|1369953']);
+    await page.evaluate(()=>{
+      const rows=S.data.CLI.rows.map(r=>({...r,id:r.id==='CLI-with-id'?'CLI-new-row':r.id}));
+      ensureDateChanges();clearOvr('CLI');restorePendingDates('CLI',rows);S.data.CLI.rows=rows;save();renderAll();
+    });
+    assert.equal(await page.evaluate(()=>S.ovr['CLI-new-row']),'2026-11-25');
+    assert.equal(await page.evaluate(()=>S.ovr['CLI-without-id']),undefined);
+    await page.locator('[data-t=dat]').click();
+    assert.match(await page.locator('#v-dat').innerText(),/2 cambios pendientes/);
+    await page.getByRole('button',{name:'Descartar cambio de Factura 1'}).click();
+    assert.deepEqual(await page.evaluate(()=>Object.keys(S.dateChanges)),['PRV|1369953']);
+    assert.equal(await page.evaluate(()=>S.ovr['CLI-new-row']),undefined);
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({onlyRowsWithAsientoItemIdEditable:true,bulkChangeSkipsOtherRows:true,drawerAndFlowConsistent:true,noPageErrors:true}));
+    console.log(JSON.stringify({onlyRowsWithAsientoItemIdEditable:true,bulkChangeSkipsOtherRows:true,pendingDatesSurviveReloadAndRefresh:true,discardRevertsDate:true,noPageErrors:true}));
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1});

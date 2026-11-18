@@ -334,6 +334,7 @@ function emptyData(){return Object.fromEntries(Object.keys(freshData()).map(k=>[
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s&&s.v===1){Object.assign(S,s.S)}}catch(e){}
 if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
 if(!S.data)S.data=freshData();
+if(!S.dateChanges||typeof S.dateChanges!=='object'||Array.isArray(S.dateChanges))S.dateChanges={};
 // Split legacy executed imports once; keep the original snapshot as a migration backup.
 if(S.data.EJE){
   const legacy=S.data.EJE,rows=legacy.rows||[];
@@ -350,7 +351,7 @@ function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage
 function saveView(){if(WORKSPACE.mode==='local')save()}
 function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
 function workspacePayload(){
-  const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','ovr','inc','data'];
+  const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','ovr','inc','data','dateChanges'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
   return {version:1,state,filters,...(WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
@@ -385,7 +386,7 @@ function finishWorkspace(){
   WORKSPACE.started=true;
   if(WORKSPACE.mode==='ready')try{localStorage.removeItem(LS);localStorage.removeItem(REPORT_FILTER_KEY)}catch{}
   credentialsReady=restoreCredentials().then(syncWorkspaceCredentials).finally(()=>{if(S.tab==='dat')renderDat()});
-  WORKSPACE.hydrating=true;setTab(S.tab);renderAll();WORKSPACE.hydrating=false;sharedReady=restoreSharedConnection();
+  WORKSPACE.hydrating=true;ensureDateChanges();setTab(S.tab);renderAll();WORKSPACE.hydrating=false;sharedReady=restoreSharedConnection();
 }
 async function loadWorkspace(){
   if(location.protocol==='file:'){WORKSPACE.mode='local';finishWorkspace();return}
@@ -403,6 +404,7 @@ async function loadWorkspace(){
     Object.assign(S,result.payload.state);
     for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
     if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
+    if(!S.dateChanges||typeof S.dateChanges!=='object'||Array.isArray(S.dateChanges))S.dateChanges={};
     WORKSPACE.vault=result.payload.vault||null;
     for(const [k,filters]of Object.entries(result.payload.filters||{}))if(REPORT_STATE[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...filters};
     WORKSPACE.mode='ready';finishWorkspace();
@@ -410,7 +412,7 @@ async function loadWorkspace(){
 }
 async function initializeWorkspace(empty){
   const previous=empty?JSON.stringify(S):null;
-  if(empty){S.data=emptyData();S.ovr={};S.inc={};S.excl=[];S.saldo=0;S.saldoManualSet=false;S.saldoFecha=null;S.ref=reportToday();S.bal={}}
+  if(empty){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.saldo=0;S.saldoManualSet=false;S.saldoFecha=null;S.ref=reportToday();S.bal={}}
   $('#workspaceImport').disabled=$('#workspaceEmpty').disabled=true;
   $('#workspaceGateText').textContent='Guardando los datos iniciales…';
   try{
@@ -462,6 +464,7 @@ function chtFlow(r){
 function ensureIds(){for(const[k,d]of Object.entries(S.data))(d.rows||[]).forEach((r,i)=>{if(r.id==null)r.id=k+'-'+i})}
 function ov(r){const n=S.ovr&&S.ovr[r.id],inc=S.inc&&S.inc[r.id];if(!(n&&n!==r.f)&&!inc)return r;const o=Object.assign({},r);if(n&&n!==r.f){o.f=n;o.fo0=r.f}if(inc)o.inc=true;return o}
 function clearOvr(k){for(const m of [S.ovr,S.inc])if(m)for(const id of Object.keys(m))if(id.startsWith(k+'-'))delete m[id]}
+function restorePendingDates(k,rows){S.ovr=S.ovr||{};for(const r of rows)if(canMoveDate(r)&&r.s===k){const pending=S.dateChanges?.[dateChangeKey(r)];if(pending&&pending.date!==r.f)S.ovr[r.id]=pending.date}}
 function allMovs(){ensureIds();
   const d=S.data,out=[];
   for(const k of ['CLI','CHP','PRE','LEA','ARCA'])for(const r of d[k].rows)if(k!=='CHP'||!r.conciliado)out.push(ov(r));
@@ -511,7 +514,12 @@ function closeDrawer(){DR=null;$('#drawerHost').innerHTML=''}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
 function rawOf(id){for(const d of Object.values(S.data))for(const r of d.rows||[])if(r.id===id)return r;return null}
 function canMoveDate(r){return !!r&&['CLI','PRV'].includes(r.s)&&(Number.isSafeInteger(r.asientoItemId)&&r.asientoItemId>0||typeof r.asientoItemId==='string'&&/^[1-9]\d*$/.test(r.asientoItemId))}
-function setDate(id,f){const raw=rawOf(id);if(!canMoveDate(raw))return;S.ovr=S.ovr||{};if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id];save();const d=DR;renderAll();
+function dateChangeKey(r){return r.s+'|'+String(r.asientoItemId)}
+function recordDateChange(raw,f){if(!canMoveDate(raw))return;S.dateChanges=S.dateChanges||{};const key=dateChangeKey(raw);
+  if(!f||f===raw.f){delete S.dateChanges[key];return}
+  S.dateChanges[key]={source:raw.s,asientoItemId:raw.asientoItemId,transaccionId:raw.transaccionId??null,company:raw.company||'',organization:raw.p||'',document:raw.comprobante||raw.doc||'',originalDate:raw.f,date:f,changedAt:new Date().toISOString()}}
+function ensureDateChanges(){S.dateChanges=S.dateChanges||{};for(const[id,f]of Object.entries(S.ovr||{})){const raw=rawOf(id);if(canMoveDate(raw)&&f&&f!==raw.f&&!S.dateChanges[dateChangeKey(raw)])recordDateChange(raw,f)}}
+function setDate(id,f){const raw=rawOf(id);if(!canMoveDate(raw))return;S.ovr=S.ovr||{};if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id];recordDateChange(raw,f);save();const d=DR;renderAll();
   if(d){const it=allMovs().filter(r=>d.ids.has(r.id));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('dch2'))setDate(t.dataset.id,t.value||null)});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
@@ -700,7 +708,7 @@ function renderFlu(){
   v.querySelectorAll('td.clk[data-cat]').forEach(td=>{const go=()=>{const o=F.rows[td.dataset.cat][td.dataset.c];openDrawer(td.dataset.cat+' · '+hdr(td.dataset.c),o.items,'')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
   v.querySelectorAll('td.clk[data-oi]').forEach(td=>{const go=()=>{const o=OK[+td.dataset.oi];openDrawer(o.p+' · '+hdr(td.dataset.c),o.o.cols[td.dataset.c].items,o.cat+' ·')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
   v.querySelectorAll('[data-tg]').forEach(b=>b.onclick=()=>{const c=CK[+b.dataset.tg];S.exp[c]=b.getAttribute('aria-expanded')!=='true';saveView();renderFlu()});
-  const setOvr=(pairs)=>{S.ovr=S.ovr||{};for(const[id,f]of pairs){const raw=rawOf(id);if(!canMoveDate(raw))continue;if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id]}save();renderAll()};
+  const setOvr=(pairs)=>{S.ovr=S.ovr||{};for(const[id,f]of pairs){const raw=rawOf(id);if(!canMoveDate(raw))continue;if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id];recordDateChange(raw,f)}save();renderAll()};
   const docsOf=i=>[...Object.values(OK[+i].o.cols),...Object.values(OK[+i].o.icols)].flatMap(x=>x.items);
   const setInc=(ids,on)=>{if(!ids.length)return;S.inc=S.inc||{};for(const id of ids){if(on)S.inc[id]=true;else delete S.inc[id]}save();renderAll()};
   const updateSelection=()=>{
@@ -1057,6 +1065,11 @@ function sourceHealthSection(){
    ${h.issues.length?`<p class="note" style="color:var(--crit)">Revisar proyección: ${esc(h.issues.join(' · '))}.</p>`:'<p class="note" style="color:var(--good)">Las fuentes principales del flujo están al día.</p>'}
    <div class="tblwrap"><table><thead><tr><th>Fuente</th><th>Datos disponibles</th></tr></thead><tbody>${h.rows.map(r=>`<tr><td>${esc(SRC[r.k].n)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
+function pendingDatesSection(){
+  const changes=Object.entries(S.dateChanges||{}).filter(([,r])=>r&&['CLI','PRV'].includes(r.source)).sort((a,b)=>String(a[1].changedAt||'').localeCompare(String(b[1].changedAt||'')));
+  return `<div class="card" style="margin-bottom:16px"><h2>Fechas pendientes de enviar a Finnegans</h2><p class="sub">Los cambios se guardan en esta instalación con su AsientoItemID. También se conservan si actualizás Clientes o Proveedores por API. Todavía no se envían a Finnegans.</p>
+  ${changes.length?`<p class="note"><b>${changes.length} cambio${changes.length===1?'':'s'} pendiente${changes.length===1?'':'s'}.</b></p><div class="tblwrap"><table><thead><tr><th>Fuente</th><th>Empresa · organización</th><th>Comprobante</th><th>AsientoItemID</th><th>Fecha original</th><th>Nueva fecha</th><th></th></tr></thead><tbody>${changes.map(([key,r])=>`<tr><td>${r.source==='CLI'?'Clientes':'Proveedores'}</td><td>${esc([r.company,r.organization].filter(Boolean).join(' · '))}</td><td>${esc(r.document)}</td><td>${esc(r.asientoItemId)}</td><td>${esc(fd(r.originalDate))}</td><td><b>${esc(fd(r.date))}</b></td><td><button type="button" class="btn" data-discard-date="${esc(key)}" aria-label="Descartar cambio de ${esc(r.document)}">Descartar</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="note">No hay cambios de fecha pendientes.</p>'}</div>`;
+}
 function configuredApiSources(){return Object.keys(REPORT_FIELDS).filter(k=>!SHARED.enabled||!!SHARED.sources[k])}
 function batchSection(){
   const sources=configuredApiSources(),blocked=API_BATCH.busy||FAPI.busy||Object.values(REPORT_STATE).some(s=>s.busy);
@@ -1151,7 +1164,7 @@ async function obtainReport(k){
     if(withoutRate.length){withoutRate.forEach(code=>FX_PENDING.add(code));throw new Error('Faltan cotizaciones a pesos argentinos para '+withoutRate.join(', ')+'. Cargalas en Datos y fuentes y repetí la consulta; se conservaron los datos anteriores.')}
     const warnings=Array.isArray(data.warnings)?data.warnings:[];
     const extra=k==='EJC'||k==='EJP'?{applications:Array.isArray(data.applications)?data.applications:[],summary:data.summary||null,period:data.period||null}:{};
-    clearOvr(k);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),lastCheck:{status:'updated',at:data.date,checkedAt:new Date().toISOString()},filters:{...filters},warnings,...extra};save();
+    ensureDateChanges();clearOvr(k);restorePendingDates(k,data.rows);S.data[k]={rows:data.rows,orig:'Finnegans · API',at:data.date,queriedAt:new Date().toISOString(),lastCheck:{status:'updated',at:data.date,checkedAt:new Date().toISOString()},filters:{...filters},warnings,...extra};save();
     state.message=`${data.rows.length} registros cargados por API al ${fd(data.date)}.`+(warnings.length?' '+warnings.join(' '):'');
     return {status:'updated'};
   }catch(error){S.data[k].lastCheck={status:'error',at:filters.fecha,checkedAt:new Date().toISOString()};save();state.error=true;state.message=error.name==='TimeoutError'||error.name==='AbortError'?'La consulta demoró demasiado. Se conservaron los datos anteriores.':error instanceof TypeError?'No se pudo conectar. Se conservaron los datos anteriores.':error.message;return {status:'error',authFailed:!tokenReady}}
@@ -1218,7 +1231,7 @@ function fxSection(){
 }
 function renderDat(){
   const v=$('#v-dat');
-  v.innerHTML=workspaceSection()+sourceHealthSection()+apiSection()+fxSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
+  v.innerHTML=workspaceSection()+sourceHealthSection()+pendingDatesSection()+apiSection()+fxSection()+batchSection()+`<div class="srcs">${Object.entries(SRC).map(([k,s])=>{const d=S.data[k],n=d.rows.length,ej=d.rows.some(r=>r.ej);
     const tot=['PPTO','EJC','EJP'].includes(k)?null:d.rows.reduce((a,r)=>a+ars(r),0);
     return `<div class="card src"><div class="hd"><div><div class="h2">${s.n}</div><div class="st">${s.d}</div></div>${n?(ej?'<span class="chip ej">Ejemplo</span>':`<span class="chip" style="color:var(--good)">Cargado</span>`):'<span class="chip">Sin datos</span>'}</div>
     <div class="st">${n?`${nf0.format(n)} registros${tot!=null?' · '+$M(tot):''}${d.orig?' · '+esc(d.orig):''}${d.at?' · '+fd(d.at):''}`:'Pendiente de carga'}</div>
@@ -1253,6 +1266,7 @@ function renderDat(){
   if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
   if($('#workspaceSaveNow'))$('#workspaceSaveNow').onclick=()=>{WORKSPACE.dirty=true;flushWorkspaceSave()};
   if($('#workspaceSignOut'))$('#workspaceSignOut').onclick=()=>{try{sessionStorage.removeItem('cf-access-key-v1')}catch{}location.reload()};
+  v.querySelectorAll('[data-discard-date]').forEach(button=>button.onclick=()=>{const key=button.dataset.discardDate;delete S.dateChanges[key];for(const d of Object.values(S.data))for(const r of d.rows||[])if(canMoveDate(r)&&dateChangeKey(r)===key)delete S.ovr?.[r.id];save();renderAll()});
   v.querySelectorAll('[data-fx]').forEach(input=>input.onchange=()=>{
     const code=input.dataset.fx,value=num(input.value);
     if(value>0&&Number.isFinite(value)&&value<1e12){if(code==='USD')S.tc=value;else S.fx[code]=value;FX_PENDING.delete(code);save();renderAll();return}
@@ -1293,7 +1307,7 @@ function renderDat(){
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});
   v.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=SRC[b.dataset.copy].tpl.join('\t');const m=$('#msg-'+b.dataset.copy);
     navigator.clipboard.writeText(t).then(()=>{m.className='msg ok';m.textContent='Encabezados copiados. Pegalos en la fila 1 de una hoja de Excel.'},()=>{m.className='msg';m.textContent=t})});
-  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=WORKSPACE.mode==='ready'?emptyData():freshData();delete S.legacyExecuted;S.ovr={};S.inc={};S.excl=[];save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
+  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=WORKSPACE.mode==='ready'?emptyData():freshData();delete S.legacyExecuted;S.ovr={};S.dateChanges={};S.inc={};S.excl=[];save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
 
 /* ---------- carga de Excel ---------- */
 const nk=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -1354,7 +1368,7 @@ function renderAll(){
   const ex=Object.entries(S.data).filter(([k,d])=>d.rows.some(r=>r.ej)).map(([k])=>SRC[k].n);
   const nx=(S.excl||[]).length,no=Object.keys(S.ovr||{}).length,ni=Object.keys(S.inc||{}).length;
   $('#exBanner').innerHTML=(ex.length?`<div class="banner"><span class="chip ej">Ejemplo</span><span>Hay datos de ejemplo cargados en: <b>${ex.join(', ')}</b>. No son cifras reales; quitalos en Datos y fuentes antes de usar el flujo.</span></div>`:'')+(nx?`<div class="banner"><span class="chip">Escenario</span><span>${nx===1?'1 organización excluida':nx+' organizaciones excluidas'} del flujo, el resumen y las alertas.</span><button class="btn" id="bAll">Incluir todas</button></div>`:'')+(no?`<div class="banner"><span class="chip">Escenario</span><span>${no===1?'1 vencimiento reprogramado':no+' vencimientos reprogramados'}. Se reflejan en el flujo, el resumen y el calendario.</span><button class="btn" id="bOvr">Volver a las fechas originales</button></div>`:'');
-  if($('#bOvr'))$('#bOvr').onclick=()=>{S.ovr={};save();renderAll()};
+  if($('#bOvr'))$('#bOvr').onclick=()=>{S.ovr={};S.dateChanges={};save();renderAll()};
   if(ni){$('#exBanner').insertAdjacentHTML('beforeend',`<div class="banner"><span class="chip incc">Incobrables</span><span>${ni===1?'1 documento marcado':ni+' documentos marcados'} como incobrable${ni===1?'':'s'}. Se muestran en el flujo pero no suman a los ingresos.</span><button class="btn" id="bInc">Quitar todos</button></div>`);$('#bInc').onclick=()=>{S.inc={};save();renderAll()}}
   if($('#bAll'))$('#bAll').onclick=()=>{S.excl=[];save();renderAll()};
   const health=sourceHealth();

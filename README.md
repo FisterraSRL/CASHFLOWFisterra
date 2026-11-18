@@ -76,6 +76,12 @@ El repositorio incluye `vercel.json` para servir la app como sitio estático:
 
 Los cambios enviados a `main` disparan el despliegue si está activa la integración con GitHub. El proyecto de Fisterra conserva la versión de ejemplo. Para una instalación nueva, crear otro proyecto de Vercel conectado al mismo repositorio y definir `CASHFLOW_INSTALLATION_NAME` con el nombre del cliente. El proceso de compilación genera esa publicación con la etiqueta del cliente y sin movimientos, saldos ni tipo de cambio de Fisterra. Cada proyecto debe tener su propia base PostgreSQL y `CASHFLOW_ACCESS_KEY`. Hasta completar ambas, las APIs de esa instalación responden con error y no exponen datos. Las credenciales y filtros de Finnegans se cargan después desde **Datos y fuentes**; los reportes son los mismos para todas las instalaciones.
 
+### Fechas pendientes de enviar a Finnegans
+
+Al reprogramar un documento de Clientes o Proveedores con `AsientoItemID`, la aplicación guarda la nueva fecha, fecha original, `TransaccionID`, empresa y comprobante en `state.dateChanges`, identificada por fuente y `AsientoItemID`. Los cambios se comparten mediante el almacenamiento de la instalación, aparecen en **Datos y fuentes → Fechas pendientes de enviar a Finnegans** y sobreviven a una nueva consulta de composición de saldos. Descartar un cambio restaura la fecha del reporte. Los cheques y los documentos sin `AsientoItemID` no generan cambios pendientes.
+
+El envío a `GET /api/reports/ActualizarFechaCashflowAsientoItem?ACCESS_TOKEN=...&AsientoItemID=...&FechaCashflow=AAAA-MM-DD` todavía no está habilitado: falta conocer la respuesta de éxito y error para confirmar cada actualización sin perder pendientes. Actualizar fuentes por API tampoco envía cambios de fecha.
+
 Para regenerar el HTML local de Fisterra: `node scripts/build-deployment.cjs`. Para verificar una instalación nueva sin alterar ese archivo: definir `CASHFLOW_INSTALLATION_NAME=Nubiral` y ejecutar `node scripts/build-deployment.cjs tmp/nubiral.html`.
 
 ### Varias empresas y monedas
