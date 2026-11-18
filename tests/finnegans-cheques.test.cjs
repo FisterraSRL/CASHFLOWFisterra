@@ -24,6 +24,13 @@ test('issued cheques are expenses with their original due date, number, bank and
  assert.equal(r.s,'CHP');assert.equal(r.cat,'Cheques emitidos');assert.equal(r.m,-125000);assert.equal(r.c,'ARS');assert.equal(r.f,'2026-11-20');assert.equal(r.fc,'2026-11-01');assert.equal(r.p,'Proveedor de prueba');assert.equal(r.doc,'Ch 00123 · OP - 10');assert.equal(r.chequeNumber,'00123');assert.equal(r.x,'Banco Galicia');assert.equal(r.e,'Emitido');assert.match(r.id,/^CHP-/);
  assert.equal(normalizeReport('CHP',[cheque({IMPMONEDATRANS:-125000})],'2026-11-10').rows[0].m,-125000);
 });
+test('cheques do not retain transaction or journal item IDs',()=>{
+ for(const source of ['CHP','CHT']){
+  const row=normalizeReport(source,[cheque({TRANSACCIONID:374684,ASIENTOITEMID:1369927,ESTADO:source==='CHT'?'En Cartera':'Emitido'})],'2026-11-10').rows[0];
+  assert.equal(Object.hasOwn(row,'transaccionId'),false);
+  assert.equal(Object.hasOwn(row,'asientoItemId'),false);
+ }
+});
 test('own cheques support Excel aliases and USD without inferring due dates from status',()=>{
  const f={Razonsocial:'Tercero',Número:123,Documento:'OP-1','Fecha de vto.':'20/11/2026','Imp. moneda trans.':'2.000,50',Moneda:'USD',Estado:'Emitido',Banco:'ICBC'};
  const r=normalizeReport('CHP',[f],'2026-11-10').rows[0];assert.equal(r.m,-2000.5);assert.equal(r.c,'USD');assert.equal(r.x,'ICBC');

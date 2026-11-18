@@ -53,6 +53,14 @@ test('normalizes official field names, USD original amount, snapshot, and compan
  const out=normalizeReport('CLI',{data:{rows:[fixture()]}},'2026-10-15');const r=out.rows[0];
  assert.equal(r.m,100);assert.equal(r.c,'USD');assert.equal(r.f,'2026-10-01');assert.equal(r.company,'Empresa de prueba');assert.match(r.id,/^CLI-/);assert.equal(out.warnings.length,0);
 });
+test('customer and supplier API rows retain Finnegans transaction and journal item IDs only when supplied',()=>{
+ for(const source of ['CLI','PRV']){
+  const row=normalizeReport(source,[fixture({TRANSACCIONID:374684,ASIENTOITEMID:1369927,PROVEEDOR:'Proveedor de prueba',CUENTA:'PROVEEDORES'})],'2026-10-15').rows[0];
+  assert.equal(row.transaccionId,374684);assert.equal(row.asientoItemId,1369927);
+  const without=normalizeReport(source,[fixture({PROVEEDOR:'Proveedor de prueba',CUENTA:'PROVEEDORES'})],'2026-10-15').rows[0];
+  assert.equal(Object.hasOwn(without,'transaccionId'),false);assert.equal(Object.hasOwn(without,'asientoItemId'),false);
+ }
+});
 test('keeps Comprobante as the displayed invoice number without changing Documento identity',()=>{
  for(const source of ['CLI','PRV']){
   const raw=fixture({DOCUMENTO:'FCV-07 - 315',COMPROBANTE:'F-0010-00001952',PROVEEDOR:'Proveedor de prueba',CUENTA:'PROVEEDORES'});
