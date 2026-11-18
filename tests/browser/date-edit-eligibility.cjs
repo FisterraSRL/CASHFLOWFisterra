@@ -68,7 +68,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     assert.equal(await page.evaluate(()=>S.ovr['CLI-new-row']),'2026-11-25');
     assert.equal(await page.evaluate(()=>S.ovr['CLI-without-id']),undefined);
     await page.locator('[data-t=dat]').click();
-    assert.match(await page.locator('#v-dat').innerText(),/2 cambios pendientes/);
+    assert.match(await page.locator('#v-dat').innerText(),/2 pendientes · 0 enviados/);
     await page.getByRole('button',{name:'Descartar cambio de Factura 1'}).click();
     assert.deepEqual(await page.evaluate(()=>Object.keys(S.dateChanges)),['PRV|1369953']);
     assert.equal(await page.evaluate(()=>S.ovr['CLI-new-row']),undefined);

@@ -516,8 +516,9 @@ function rawOf(id){for(const d of Object.values(S.data))for(const r of d.rows||[
 function canMoveDate(r){return !!r&&['CLI','PRV'].includes(r.s)&&(Number.isSafeInteger(r.asientoItemId)&&r.asientoItemId>0||typeof r.asientoItemId==='string'&&/^[1-9]\d*$/.test(r.asientoItemId))}
 function dateChangeKey(r){return r.s+'|'+String(r.asientoItemId)}
 function recordDateChange(raw,f){if(!canMoveDate(raw))return;S.dateChanges=S.dateChanges||{};const key=dateChangeKey(raw);
-  if(!f||f===raw.f){delete S.dateChanges[key];return}
-  S.dateChanges[key]={source:raw.s,asientoItemId:raw.asientoItemId,transaccionId:raw.transaccionId??null,company:raw.company||'',organization:raw.p||'',document:raw.comprobante||raw.doc||'',originalDate:raw.f,date:f,changedAt:new Date().toISOString()}}
+  const previous=S.dateChanges[key],date=f||raw.f,lastSentDate=previous?.lastSentDate;
+  if(date===raw.f&&!lastSentDate){delete S.dateChanges[key];return}
+  S.dateChanges[key]={source:raw.s,asientoItemId:raw.asientoItemId,transaccionId:raw.transaccionId??null,company:raw.company||'',organization:raw.p||'',document:raw.comprobante||raw.doc||'',originalDate:raw.f,date,changedAt:new Date().toISOString(),...(lastSentDate?{lastSentDate}:{}),status:lastSentDate===date?'sent':'pending',...(lastSentDate===date&&previous?.sentAt?{sentAt:previous.sentAt}:{})}}
 function ensureDateChanges(){S.dateChanges=S.dateChanges||{};for(const[id,f]of Object.entries(S.ovr||{})){const raw=rawOf(id);if(canMoveDate(raw)&&f&&f!==raw.f&&!S.dateChanges[dateChangeKey(raw)])recordDateChange(raw,f)}}
 function setDate(id,f){const raw=rawOf(id);if(!canMoveDate(raw))return;S.ovr=S.ovr||{};if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id];recordDateChange(raw,f);save();const d=DR;renderAll();
   if(d){const it=allMovs().filter(r=>d.ids.has(r.id));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
@@ -1032,6 +1033,7 @@ function restoreReportFilters(){
 }
 const REPORT_STATE=restoreReportFilters();
 const API_BATCH={busy:false,message:'',error:false,results:[]};
+const DATE_SEND={busy:false,message:'',error:false,results:[]};
 const PROJECTION_SOURCES=['CLI','PRV','CHP','CHT'];
 function sourceHealth(){
   const today=reportToday(),dates=new Set(),issues=[],rows=[];
@@ -1067,8 +1069,44 @@ function sourceHealthSection(){
 }
 function pendingDatesSection(){
   const changes=Object.entries(S.dateChanges||{}).filter(([,r])=>r&&['CLI','PRV'].includes(r.source)).sort((a,b)=>String(a[1].changedAt||'').localeCompare(String(b[1].changedAt||'')));
-  return `<div class="card" style="margin-bottom:16px"><h2>Fechas pendientes de enviar a Finnegans</h2><p class="sub">Los cambios se guardan en esta instalación con su AsientoItemID. También se conservan si actualizás Clientes o Proveedores por API. Todavía no se envían a Finnegans.</p>
-  ${changes.length?`<p class="note"><b>${changes.length} cambio${changes.length===1?'':'s'} pendiente${changes.length===1?'':'s'}.</b></p><div class="tblwrap"><table><thead><tr><th>Fuente</th><th>Empresa · organización</th><th>Comprobante</th><th>AsientoItemID</th><th>Fecha original</th><th>Nueva fecha</th><th></th></tr></thead><tbody>${changes.map(([key,r])=>`<tr><td>${r.source==='CLI'?'Clientes':'Proveedores'}</td><td>${esc([r.company,r.organization].filter(Boolean).join(' · '))}</td><td>${esc(r.document)}</td><td>${esc(r.asientoItemId)}</td><td>${esc(fd(r.originalDate))}</td><td><b>${esc(fd(r.date))}</b></td><td><button type="button" class="btn" data-discard-date="${esc(key)}" aria-label="Descartar cambio de ${esc(r.document)}">Descartar</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="note">No hay cambios de fecha pendientes.</p>'}</div>`;
+  const pending=changes.filter(([,r])=>r.status!=='sent').length,sent=changes.length-pending;
+  return `<div class="card" style="margin-bottom:16px"><div class="toolbar"><div><h2>Fechas para Finnegans</h2><p class="sub">Los cambios se guardan en esta instalación con su AsientoItemID. Solo se envían al pulsar el botón; Finnegans debe responder RESULTADO: OK para marcarlos como enviados.</p></div><button type="button" class="btn pri" id="sendPendingDates"${!pending||DATE_SEND.busy||API_BATCH.busy?' disabled':''}>${DATE_SEND.busy?'Enviando…':'Enviar pendientes a Finnegans'}</button></div>
+  <p class="note"><b>${pending} pendiente${pending===1?'':'s'}</b> · ${sent} enviado${sent===1?'':'s'}.</p><div class="msg${DATE_SEND.error?' err':''}" role="status" aria-live="polite">${esc(DATE_SEND.message)}</div>
+  ${DATE_SEND.results.length?`<ul class="note">${DATE_SEND.results.map(r=>`<li>${esc(r.document)}: ${esc(r.message)}</li>`).join('')}</ul>`:''}
+  ${changes.length?`<div class="tblwrap"><table><thead><tr><th>Fuente</th><th>Empresa · organización</th><th>Comprobante</th><th>AsientoItemID</th><th>Fecha original</th><th>Fecha Cashflow</th><th>Estado</th><th></th></tr></thead><tbody>${changes.map(([key,r])=>`<tr><td>${r.source==='CLI'?'Clientes':'Proveedores'}</td><td>${esc([r.company,r.organization].filter(Boolean).join(' · '))}</td><td>${esc(r.document)}</td><td>${esc(r.asientoItemId)}</td><td>${esc(fd(r.originalDate))}</td><td><b>${esc(fd(r.date))}</b></td><td>${r.status==='sent'?'Enviado':'Pendiente'}</td><td>${r.status==='sent'?'':`<button type="button" class="btn" data-discard-date="${esc(key)}" aria-label="Descartar cambio de ${esc(r.document)}"${DATE_SEND.busy?' disabled':''}>Descartar</button>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">No hay cambios de fecha registrados.</p>'}</div>`;
+}
+async function saveDateChangesNow(){
+  if(WORKSPACE.mode==='local')return;
+  if(WORKSPACE.mode!=='ready')throw new Error('El almacenamiento compartido no está listo. Recargá la aplicación antes de enviar cambios.');
+  for(let i=0;WORKSPACE.busy&&i<300;i++)await new Promise(resolve=>setTimeout(resolve,100));
+  if(WORKSPACE.busy)throw new Error('El guardado compartido sigue ocupado. Intentá nuevamente.');
+  if(WORKSPACE.dirty)await flushWorkspaceSave();
+  if(WORKSPACE.mode!=='ready'||WORKSPACE.dirty)throw new Error('Los cambios pendientes no se pudieron guardar en esta instalación. Revisá el estado del almacenamiento antes de enviarlos.');
+}
+async function sendPendingDates(){
+  if(DATE_SEND.busy||API_BATCH.busy)return;
+  const entries=Object.entries(S.dateChanges||{}).filter(([,r])=>r&&['CLI','PRV'].includes(r.source)&&r.status!=='sent');
+  if(!entries.length)return;
+  DATE_SEND.busy=true;DATE_SEND.error=false;DATE_SEND.results=[];DATE_SEND.message='Preparando los cambios pendientes…';renderDat();
+  try{
+    if(location.protocol==='file:')throw new Error('Abrí la versión web para enviar cambios a Finnegans.');
+    await Promise.all([credentialsReady,sharedReady]);await saveDateChangesNow();
+    for(const [key,snapshot]of entries){
+      const current=S.dateChanges[key];if(!current||current.status==='sent'||current.date!==snapshot.date)continue;
+      DATE_SEND.message=`Enviando ${DATE_SEND.results.length+1} de ${entries.length}: ${current.document||current.asientoItemId}.`;if(S.tab==='dat')renderDat();
+      try{
+        const shared=SHARED.enabled,token=shared?null:await currentFinnegansToken();
+        const response=await fetch('/api/finnegans-date-change',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify({source:current.source,asientoItemId:current.asientoItemId,date:current.date,...(shared?{shared:true}:{access_token:token})}),cache:'no-store',signal:AbortSignal.timeout(shared?55000:35000)});
+        const data=await response.json().catch(()=>null);
+        if(!response.ok||data?.confirmed!==true||data.source!==current.source||String(data.asientoItemId)!==String(current.asientoItemId)||data.date!==current.date)throw new Error(data?.error||'Finnegans no confirmó RESULTADO: OK. El cambio sigue pendiente.');
+        const latest=S.dateChanges[key];if(latest){const before={...latest};latest.lastSentDate=current.date;latest.sentAt=new Date().toISOString();latest.status=latest.date===current.date?'sent':'pending';save();try{await saveDateChangesNow()}catch(error){Object.assign(latest,before);if(!before.lastSentDate)delete latest.lastSentDate;if(!before.sentAt)delete latest.sentAt;save();throw error}}
+        DATE_SEND.results.push({document:current.document||String(current.asientoItemId),message:'Enviado y confirmado por Finnegans.'});
+      }catch(error){DATE_SEND.error=true;DATE_SEND.results.push({document:current.document||String(current.asientoItemId),message:error.name==='TimeoutError'||error.name==='AbortError'?'No se pudo confirmar la respuesta. Verificá Finnegans antes de reintentar.':error.message})}
+    }
+    const ok=DATE_SEND.results.filter(r=>r.message==='Enviado y confirmado por Finnegans.').length;
+    DATE_SEND.message=`Envío finalizado: ${ok} confirmado${ok===1?'':'s'} y ${DATE_SEND.results.length-ok} sin confirmar.`;
+  }catch(error){DATE_SEND.error=true;DATE_SEND.message=error.message}
+  finally{DATE_SEND.busy=false;renderAll()}
 }
 function configuredApiSources(){return Object.keys(REPORT_FIELDS).filter(k=>!SHARED.enabled||!!SHARED.sources[k])}
 function batchSection(){
@@ -1266,7 +1304,11 @@ function renderDat(){
   if($('#testSharedConnection'))$('#testSharedConnection').onclick=testSharedConnection;
   if($('#workspaceSaveNow'))$('#workspaceSaveNow').onclick=()=>{WORKSPACE.dirty=true;flushWorkspaceSave()};
   if($('#workspaceSignOut'))$('#workspaceSignOut').onclick=()=>{try{sessionStorage.removeItem('cf-access-key-v1')}catch{}location.reload()};
-  v.querySelectorAll('[data-discard-date]').forEach(button=>button.onclick=()=>{const key=button.dataset.discardDate;delete S.dateChanges[key];for(const d of Object.values(S.data))for(const r of d.rows||[])if(canMoveDate(r)&&dateChangeKey(r)===key)delete S.ovr?.[r.id];save();renderAll()});
+  $('#sendPendingDates').onclick=sendPendingDates;
+  v.querySelectorAll('[data-discard-date]').forEach(button=>button.onclick=()=>{const key=button.dataset.discardDate,change=S.dateChanges[key];if(!change||change.status==='sent')return;
+    if(change.lastSentDate){change.date=change.lastSentDate;change.status='sent'}else delete S.dateChanges[key];
+    for(const d of Object.values(S.data))for(const r of d.rows||[])if(canMoveDate(r)&&dateChangeKey(r)===key){if(change?.lastSentDate&&change.lastSentDate!==r.f)S.ovr[r.id]=change.lastSentDate;else delete S.ovr?.[r.id]}
+    save();renderAll()});
   v.querySelectorAll('[data-fx]').forEach(input=>input.onchange=()=>{
     const code=input.dataset.fx,value=num(input.value);
     if(value>0&&Number.isFinite(value)&&value<1e12){if(code==='USD')S.tc=value;else S.fx[code]=value;FX_PENDING.delete(code);save();renderAll();return}
@@ -1368,7 +1410,7 @@ function renderAll(){
   const ex=Object.entries(S.data).filter(([k,d])=>d.rows.some(r=>r.ej)).map(([k])=>SRC[k].n);
   const nx=(S.excl||[]).length,no=Object.keys(S.ovr||{}).length,ni=Object.keys(S.inc||{}).length;
   $('#exBanner').innerHTML=(ex.length?`<div class="banner"><span class="chip ej">Ejemplo</span><span>Hay datos de ejemplo cargados en: <b>${ex.join(', ')}</b>. No son cifras reales; quitalos en Datos y fuentes antes de usar el flujo.</span></div>`:'')+(nx?`<div class="banner"><span class="chip">Escenario</span><span>${nx===1?'1 organización excluida':nx+' organizaciones excluidas'} del flujo, el resumen y las alertas.</span><button class="btn" id="bAll">Incluir todas</button></div>`:'')+(no?`<div class="banner"><span class="chip">Escenario</span><span>${no===1?'1 vencimiento reprogramado':no+' vencimientos reprogramados'}. Se reflejan en el flujo, el resumen y el calendario.</span><button class="btn" id="bOvr">Volver a las fechas originales</button></div>`:'');
-  if($('#bOvr'))$('#bOvr').onclick=()=>{S.ovr={};S.dateChanges={};save();renderAll()};
+  if($('#bOvr'))$('#bOvr').onclick=()=>{for(const d of Object.values(S.data))for(const r of d.rows||[])if(canMoveDate(r)&&S.ovr?.[r.id])recordDateChange(r,null);S.ovr={};save();renderAll()};
   if(ni){$('#exBanner').insertAdjacentHTML('beforeend',`<div class="banner"><span class="chip incc">Incobrables</span><span>${ni===1?'1 documento marcado':ni+' documentos marcados'} como incobrable${ni===1?'':'s'}. Se muestran en el flujo pero no suman a los ingresos.</span><button class="btn" id="bInc">Quitar todos</button></div>`);$('#bInc').onclick=()=>{S.inc={};save();renderAll()}}
   if($('#bAll'))$('#bAll').onclick=()=>{S.excl=[];save();renderAll()};
   const health=sourceHealth();
