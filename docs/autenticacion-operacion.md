@@ -9,7 +9,7 @@ Para activarlo en una instalación:
 1. Respaldar la fila existente de `cashflow_workspace` en su propia base Neon. Verificar que `DATABASE_URL` o `CASHFLOW_DATABASE_URL` apunte a la base correcta de esa instalación.
 2. Definir `CASHFLOW_ADMIN_EMAIL` con el correo del primer administrador y `CASHFLOW_ADMIN_PASSWORD` con una contraseña fuerte de 12 a 256 caracteres directamente en las variables protegidas de Vercel. No poner la contraseña en el repositorio. La inicialización crea ese administrador solo si no hay usuarios; luego puede retirarse la variable de contraseña.
 3. Configurar `FINNEGANS_CLIENT_ID`, `FINNEGANS_CLIENT_SECRET` y los filtros `FINNEGANS_<FUENTE>_FILTERS` de las fuentes habilitadas en el servidor. Las credenciales cifradas del workspace anterior no se entregan a los usuarios del modo nuevo.
-4. Obtener y validar de Finnegans los pares código/nombre de cada empresa. Las consultas no envían el código como filtro; el nombre debe coincidir con `EMPRESA` de las filas devueltas para separar los datos en el servidor. Dar de alta las empresas sin duplicar nombres y asignarlas al administrador.
+4. Usar «Actualizar empresas activas desde Finnegans» para obtener los pares `codigo`/`nombre` de `empresaSucursal/list`. Solo se incorporan las filas con `activo: true`; las empresas que dejan de estar activas se desactivan localmente sin borrar sus datos. Las consultas no envían el código como filtro; el nombre debe coincidir con `EMPRESA` de las filas devueltas para separar los datos en el servidor. Asignar las empresas al administrador.
 5. Activar `CASHFLOW_AUTH_MODE=users` y publicar. Ingresar como administrador, revisar el resumen de migración y copiar una empresa por vez. El proceso solo copia filas con nombre de empresa coincidente, deja afuera las filas sin empresa, excluye el saldo manual y el vault de credenciales y conserva intacto el workspace anterior.
 6. Seleccionar cada empresa, verificar movimientos, saldos, parámetros y consultas Finnegans contra sus reportes originales. Cargar o asignar explícitamente presupuestos y otros datos sin empresa. Recién entonces crear usuarios estándar y asignarles empresas.
 
@@ -37,7 +37,7 @@ La tabla anterior `cashflow_workspace` no se modifica ni se elimina.
 
 - `GET/POST /api/auth`: sesión, login, logout, selección de empresa, solicitud y confirmación de restablecimiento.
 - `GET/POST/PATCH /api/users`: listado y mantenimiento de usuarios, solo administradores.
-- `GET/POST/PATCH /api/companies`: catálogo de empresas, solo administradores. La obtención automática del catálogo Finnegans queda pendiente de la API que proveerá el cliente.
+- `GET/POST/PATCH /api/companies`: catálogo de empresas, solo administradores. `POST {"action":"sync"}` consulta `empresaSucursal/list` con un token obtenido en el servidor y sincroniza únicamente las empresas activas.
 - `GET/POST /api/migrate`: vista previa y copia por empresa desde el workspace anterior, solo administradores.
 - `/api/workspace`, `/api/finnegans-config`, `/api/finnegans-report` y `/api/finnegans-date-change`: exigen sesión y empresa seleccionada en modo nuevo. El workspace usa siempre el ID de empresa de la sesión. Los reportes consultan todas las empresas sin parámetro `Empresa`; el servidor filtra las filas de la empresa seleccionada antes de responder y rechaza respuestas con filas sin empresa identificable.
 
@@ -49,7 +49,7 @@ La interfaz y los tokens de restablecimiento están implementados. El envío que
 
 Las contraseñas usan scrypt con sal aleatoria. Las cookies de sesión son `HttpOnly`, `SameSite=Lax` y `Secure` en HTTPS. Se guardan hashes de tokens de sesión y recuperación. La desactivación o el cambio de contraseña revoca sesiones. Las rutas administrativas comprueban el rol en el servidor. La validación de empresa se aplica en la base y en las APIs, además de la interfaz. No hay registro público.
 
-La separación de reportes depende de que Finnegans devuelva el nombre correcto de la empresa en cada fila. Las fuentes que no identifiquen la empresa se rechazan en modo nuevo hasta acordar una regla verificable. La respuesta original de Finnegans no se muestra en el diagnóstico de un usuario, porque puede contener datos de otras empresas. La API de catálogo de empresas aún no fue proporcionada, así que el alta manual de código/nombre es provisional. No habilitar producción con nombres o códigos inferidos.
+La separación de reportes depende de que Finnegans devuelva el nombre correcto de la empresa en cada fila. Las fuentes que no identifiquen la empresa se rechazan en modo nuevo hasta acordar una regla verificable. La respuesta original de Finnegans no se muestra en el diagnóstico de un usuario, porque puede contener datos de otras empresas. La sincronización del catálogo usa las credenciales Finnegans propias de cada instalación guardadas en el servidor. No habilitar producción sin comparar nombres de empresas de los reportes con el catálogo real.
 
 ## Pruebas
 

@@ -3,6 +3,7 @@ const {randomUUID}=require('node:crypto');
 const {authorize}=require('../lib/workspace-auth.cjs');
 const {audit}=require('../lib/auth-store.cjs');
 const {usersEnabled}=require('../lib/auth-session.cjs');
+const {fetchActiveCompanies}=require('../lib/finnegans-companies.cjs');
 
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');res.setHeader('X-Content-Type-Options','nosniff');
@@ -16,6 +17,21 @@ module.exports=async function handler(req,res){
     if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato debe ser JSON.'});
     if(Number(req.headers['content-length'])>12000)return res.status(413).json({error:'La solicitud es demasiado grande.'});
     let body=req.body;if(typeof body==='string'){if(Buffer.byteLength(body)>12000)return res.status(413).json({error:'La solicitud es demasiado grande.'});body=JSON.parse(body)}
+    if(req.method==='POST'&&body?.action==='sync'){
+      const companies=await fetchActiveCompanies();
+      if(!companies.length)return res.status(422).json({error:'Finnegans no devolvió empresas activas. No se modificó el catálogo.'});
+      const entries=companies.map(company=>({...company,id:randomUUID()}));
+      await sql`INSERT INTO cashflow_companies (id,code,name,active)
+        SELECT entry.id::uuid,entry.code,entry.name,true
+        FROM jsonb_to_recordset(${JSON.stringify(entries)}::jsonb) AS entry(id text,code text,name text)
+        ON CONFLICT (code) DO UPDATE SET name=EXCLUDED.name,active=true,updated_at=now()`;
+      await sql`UPDATE cashflow_companies AS company SET active=false,updated_at=now()
+        WHERE active=true AND NOT EXISTS (
+          SELECT 1 FROM jsonb_to_recordset(${JSON.stringify(entries)}::jsonb) AS entry(id text,code text,name text)
+          WHERE entry.code=company.code)`;
+      await audit(sql,req.cashflowAuth.user.id,null,'companies_synced',{activeCount:companies.length});
+      return res.status(200).json({activeCount:companies.length});
+    }
     const code=typeof body?.code==='string'?body.code.trim():'',name=typeof body?.name==='string'?body.name.trim().replace(/\s+/g,' '):'';
     if(!/^[A-Za-z0-9_./-]{1,64}$/.test(code)||name.length<2||name.length>120)return res.status(400).json({error:'Ingresá el código y nombre de empresa de Finnegans.'});
     let id=body.id;

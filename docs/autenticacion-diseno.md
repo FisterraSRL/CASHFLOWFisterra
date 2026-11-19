@@ -4,7 +4,7 @@
 
 - Cada instalación (Fisterra y Nubiral) tiene su propia base Neon PostgreSQL. `cashflow_workspace` contiene una sola fila con todo el estado de esa instalación en `payload jsonb`.
 - El acceso actual usa una clave común `CASHFLOW_ACCESS_KEY`. `lib/workspace-auth.cjs` la aplica a las rutas de workspace y Finnegans; no existe una identidad de usuario ni una tabla de empresas.
-- En Nubiral, los movimientos de varias empresas pueden convivir en ese mismo `payload`. El campo normalizado `company` es el **nombre** devuelto por los reportes. Las muestras compartidas no incluyen el **código** que exige el parámetro `Empresa` de Finnegans.
+- En Nubiral, los movimientos de varias empresas pueden convivir en ese mismo `payload`. El campo normalizado `company` es el **nombre** devuelto por los reportes. El catálogo `empresaSucursal/list` aporta el par `codigo`/`nombre`; solo se incorporan filas con `activo === true`.
 - Las credenciales Finnegans pueden estar en variables de Vercel o cifradas dentro del workspace y descifradas en el navegador con la clave común. Ese mecanismo no puede entregarse a usuarios con permisos por empresa.
 - Presupuesto, algunas cargas Excel y parámetros globales no tienen empresa. No es seguro asignarlos automáticamente a una empresa durante una migración.
 
@@ -21,7 +21,7 @@
 
 ## Migración necesaria
 
-- Asociar cada nombre de empresa de los reportes con un código estable del catálogo. La API de catálogo todavía debe ser proporcionada; las consultas de saldos ya no envían ese código como filtro.
+- Asociar cada nombre de empresa de los reportes con un código estable de `empresaSucursal/list`. Las consultas de saldos no envían ese código como filtro.
 - Separar los movimientos existentes por `company`. Los movimientos, presupuestos y saldos manuales sin empresa requieren asignación explícita; no deben copiarse a todos los workspaces.
 - Mover las credenciales Finnegans al servidor antes de retirar la clave compartida. Una instalación no debe activar el login hasta tener administrador inicial, catálogo de empresas y migración verificada.
 - Mantener las instalaciones actuales operativas mientras se desarrolla y prueba la modalidad nueva. La activación por instalación debe ser explícita, con una ruta de reversión que no borre los datos anteriores.
