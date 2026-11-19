@@ -23,13 +23,11 @@ module.exports=async function handler(req,res){
     try{
       const workspace=await readCompanyWorkspace(req.cashflowAuth.company.id),saved=workspace.payload?.filters?.[body.source]||{};
       const filters=Object.fromEntries(REPORTS[body.source].fields.filter(key=>typeof saved[key]==='string').map(key=>[key,saved[key]]));
-      config.sources[body.source]={filters:{...filters,...(config.sources[body.source]?.filters||{})}};
+      config.sources[body.source]={filters:{...(config.sources[body.source]?.filters||{}),...filters}};
     }catch{return res.status(503).json({error:'No se pudieron leer los filtros guardados de esta empresa.'})}
   }
   if(shared&&(!Object.hasOwn(REPORTS,body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros en Vercel.'});
-  // Company is intentionally omitted from every Finnegans request. In users
-  // mode the server filters the complete response before returning any rows.
-  if(shared)body.filters={...config.sources[body.source].filters,fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
+  if(shared)body.filters={...config.sources[body.source].filters,fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date()),...(usersEnabled()?{empresa:req.cashflowAuth.company.code}:{})};
   let token=body?.access_token;
   if(shared){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
   if(typeof token!=='string'||!token||token.length>16384||!/^[A-Za-z0-9._~+\/-]+=*$/.test(token))return res.status(400).json({error:'Obtené un token válido antes de consultar el reporte.'});

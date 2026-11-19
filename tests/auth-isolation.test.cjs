@@ -49,14 +49,14 @@ test('standard user cannot call administrative routes by URL',async()=>{
   assert.equal((await call(usersHandler,'GET')).statusCode,403);
   assert.equal((await call(companiesHandler,'GET')).statusCode,403);
 });
-test('Finnegans query omits company and returns only rows assigned to the session',async()=>{
+test('Finnegans query uses the selected company and returns only its rows',async()=>{
   const queried=[];
   global.fetch=async url=>{
     const request=new URL(url);queried.push(request.searchParams.get('PARAMWEBREPORT_Empresa'));
     return new Response(JSON.stringify([{ORGANIZACION:'Cliente',DOCUMENTO:'FV-1',FECHA:'2026-11-01',FECHAVTO:'2026-11-20',IMPORTEMONPPAL:100,MONEDA:'Pesos',EMPRESA:other.name},{ORGANIZACION:'Cliente',DOCUMENTO:'FV-2',FECHA:'2026-11-01',FECHAVTO:'2026-11-20',IMPORTEMONPPAL:200,MONEDA:'Pesos',EMPRESA:own.name}]));
   };
   const result=await call(reportHandler,'POST',{source:'CLI',filters:{empresa:other.code},access_token:'browser.token'});
-  assert.equal(result.statusCode,200);assert.deepEqual(queried,[null]);
+  assert.equal(result.statusCode,200);assert.deepEqual(queried,[own.code]);
   assert.equal(result.body.rows.length,1);assert.equal(result.body.rows[0].company,own.name);
   assert.equal(result.body.diagnostics.responseBody,'[OCULTO: EL REPORTE INCLUYE OTRAS EMPRESAS]');
 });

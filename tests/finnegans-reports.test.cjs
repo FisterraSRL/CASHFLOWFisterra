@@ -7,18 +7,18 @@ test('customer URL uses exact report name and parameters and encodes filter valu
  const u=reportUrl('CLI',{fecha:'2026-10-15',organizacion:'A&B',empresa:'E1',cuenta:'',dimension:'ignored'},'test.token');
  assert.equal(u.origin,'https://api.finneg.com');assert.equal(u.pathname,'/api/reports/composicionSaldoCliente');
  assert.equal(u.searchParams.get('ACCESS_TOKEN'),'test.token');assert.equal(u.searchParams.get('PARAMWEBREPORT_fecha'),'2026-10-15');
- assert.equal(u.searchParams.get('PARAMWEBREPORT_organizacion'),'A&B');assert.equal(u.searchParams.has('PARAMWEBREPORT_Empresa'),false);
+ assert.equal(u.searchParams.get('PARAMWEBREPORT_organizacion'),'A&B');assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');
  assert.ok(!u.searchParams.has('PARAMWEBREPORT_cuenta'));assert.ok(!u.searchParams.has('PARAMWEBREPORT_dimension'));
 });
 test('supplier URL supports dimension, value and case-sensitive document parameter',()=>{
  const u=reportUrl('PRV',{fecha:'2026-10-15',dimension:'Centro',valor:'Valor 1',tipoDocumento:'FC'},'token');
  assert.equal(u.pathname,'/api/reports/composicionSaldoProveedor');assert.equal(u.searchParams.get('PARAMWEBREPORT_dimension'),'Centro');assert.equal(u.searchParams.get('PARAMWEBREPORT_valor'),'Valor 1');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoDocumento'),'FC');
 });
-test('bank URL uses the cut-off date without a company filter',()=>{
+test('bank URL uses the cut-off date and selected company',()=>{
  const u=reportUrl('BCO',{fecha:'2026-11-13',empresa:'E1'},'test.token');
  assert.equal(u.pathname,'/api/reports/SaldoCuentasBanco');
  assert.equal(u.searchParams.get('PARAMETER_FechaCorte'),'2026-11-13');
- assert.equal(u.searchParams.has('PARAMETER_Empresa'),false);
+ assert.equal(u.searchParams.get('PARAMETER_Empresa'),'E1');
  assert.equal(u.searchParams.get('ACCESS_TOKEN'),'test.token');
  assert.equal(u.searchParams.has('PARAMWEBREPORT_fecha'),false);
  assert.equal(reportUrl('BCO',{fecha:'2026-11-13'},'token').searchParams.has('PARAMETER_Empresa'),false);
@@ -47,7 +47,7 @@ test('bank report rejects missing fields, stale dates, duplicate accounts and pa
 test('rejects unknown source, invalid date and non-string filters',()=>{
  assert.throws(()=>reportUrl('PRE',{fecha:'2026-10-15'},'token'));
  assert.throws(()=>reportUrl('CLI',{fecha:'2026-02-31'},'token'));
- assert.equal(reportUrl('CLI',{fecha:'2026-10-15',empresa:{}},'token').searchParams.has('PARAMWEBREPORT_Empresa'),false);
+ assert.throws(()=>reportUrl('CLI',{fecha:'2026-10-15',empresa:{}},'token'),/empresa seleccionada/);
 });
 test('normalizes official field names, USD original amount, snapshot, and company',()=>{
  const out=normalizeReport('CLI',{data:{rows:[fixture()]}},'2026-10-15');const r=out.rows[0];

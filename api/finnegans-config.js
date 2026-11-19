@@ -19,7 +19,7 @@ module.exports=async function(req,res){
         for(const [source,report] of Object.entries(REPORTS)){
           const saved=workspace.payload?.filters?.[source]||{};
           const filters=Object.fromEntries(report.fields.filter(key=>typeof saved[key]==='string').map(key=>[key,saved[key]]));
-          config.sources[source]={filters:{...filters,...(config.sources[source]?.filters||{})}};
+          config.sources[source]={filters:{...(config.sources[source]?.filters||{}),...filters}};
         }
       }
     }

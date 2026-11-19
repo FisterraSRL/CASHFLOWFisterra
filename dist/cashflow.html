@@ -363,7 +363,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.24">v1.0.24</span>
+    <span class="app-version" aria-label="Versión 1.0.25">v1.0.25</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -1113,7 +1113,7 @@ async function restoreSharedConnection(){
     if(!response.ok)return;const config=await response.json();
     if(config.enabled!==true||!config.sources||typeof config.sources!=='object')return;
     SHARED.enabled=true;SHARED.sources=config.sources;
-    for(const k of Object.keys(REPORT_FIELDS))if(config.sources[k])REPORT_STATE[k].filters={...config.sources[k].filters};
+    for(const k of Object.keys(REPORT_FIELDS))if(config.sources[k])REPORT_STATE[k].filters={...REPORT_STATE[k].filters,...config.sources[k].filters};
     renderAll();
   }catch{/* Local mode remains available if shared configuration cannot be reached. */}
 }
@@ -1317,7 +1317,7 @@ function reportOptions(k){
   const cheque=k==='CHP'||k==='CHT';
   const title=k==='BCO'?'Parámetros de saldo bancario':k==='EJC'?'Parámetros de cobranza':k==='EJP'?'Parámetros de pagos':cheque?(k==='CHP'?'Parámetros de cheques propios':'Parámetros de cheques de terceros'):'Parámetros de composición de saldos';
   const chequeNote=cheque?`<p class="note">Tipo de cheque fijo: ${k==='CHT'?'De tercero (TipoCheque = 1)':'Propio (TipoCheque = 0)'}. Los vencimientos desde/hasta son opcionales; dejalos vacíos para no limitar el rango. Los cheques marcados como conciliados se conservan en la carga, pero se excluyen del flujo y las alertas.${k==='CHT'?' Solo se proyectan los valores disponibles según su estado y cuenta; los endosados y descontados no generan un nuevo cobro.':''}</p>`:'';
-  if(SHARED.enabled)return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} ${k==='BCO'?'La fecha del saldo es la fecha de corte seleccionada arriba.':'La fecha del reporte siempre es hoy (hora de Argentina).'}</p>${chequeNote}</details>`;
+  if(SHARED.enabled&&AUTH.mode!=='users')return `<details class="report-options"><summary>${title}</summary><p class="note">${SHARED.sources[k]?'Filtros compartidos configurados en Vercel: '+esc(REPORT_FIELDS[k].filter(([field])=>SHARED.sources[k].filters[field]).map(([field,label])=>label+': '+SHARED.sources[k].filters[field]).join(' · ')):'Fuente pendiente de configuración en Vercel.'} ${k==='BCO'?'La fecha del saldo es la fecha de corte seleccionada arriba.':'La fecha del reporte siempre es hoy (hora de Argentina).'}</p>${chequeNote}</details>`;
   const r=REPORT_STATE[k],fields=[['fecha',k==='BCO'?'Fecha de corte (arriba)':cheque||k==='EJC'||k==='EJP'?'Fecha hasta (hoy)':'Fecha del reporte'],...REPORT_FIELDS[k]];
   const control=(key)=>{
     const attrs=`id="report-${k}-${key}" data-report="${k}" data-filter="${key}"${r.busy||API_BATCH.busy?' disabled':''}`;
@@ -1325,12 +1325,12 @@ function reportOptions(k){
     const dateField=key==='fecha'||key==='fechaDesde'||key==='fechaVencimientoDesde'||key==='fechaVencimientoHasta';
     return `<input ${attrs} type="${dateField?'date':'text'}" value="${esc(key==='fecha'?(k==='BCO'?S.ref:reportToday()):r.filters[key]||'')}"${key==='fecha'?` readonly aria-description="${k==='BCO'?'Se toma de la fecha de corte seleccionada arriba':'Se actualiza automáticamente al día de hoy, hora de Argentina'}"`:dateField?'':' maxlength="256" placeholder="Código en Finnegans (opcional)"'}>`;
   };
-  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente${WORKSPACE.mode==='ready'?' para esta instalación':' en este navegador'}. ${k==='BCO'?'La fecha del saldo se toma de la fecha de corte seleccionada arriba.':'La fecha de consulta siempre es hoy (hora de Argentina).'} Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
+  return `<details class="report-options"><summary>${title}</summary><div class="report-grid">${fields.map(([key,label])=>`<div class="fld"><label for="report-${k}-${key}">${label}</label>${control(key)}</div>`).join('')}</div><p class="note">Los filtros se guardan automáticamente${AUTH.mode==='users'?' para la empresa seleccionada':WORKSPACE.mode==='ready'?' para esta instalación':' en este navegador'}. ${AUTH.mode==='users'?'Empresa se toma automáticamente de la selección actual. ':''}${k==='BCO'?'La fecha del saldo se toma de la fecha de corte seleccionada arriba.':'La fecha de consulta siempre es hoy (hora de Argentina).'} Los filtros vacíos se omiten.</p>${chequeNote}${k==='EJC'||k==='EJP'?`<p class="note">Incluye todos los medios y retenciones. Las aplicaciones a facturas quedan como detalle y no se suman nuevamente al ${k==='EJP'?'pagado. El mes se determina por la fecha del movimiento de pago.':'cobrado. El mes se determina por la fecha de cobranza.'}</p>`:''}</details>`;
 }
 async function obtainReport(k){
   const state=REPORT_STATE[k];if(!state||state.busy)return {status:'skipped'};
   const shared=SHARED.enabled&&!!SHARED.sources[k];
-  const filters={...(shared?SHARED.sources[k].filters:state.filters),fecha:k==='BCO'?S.ref:reportToday()};
+  const filters={...(shared&&AUTH.mode!=='users'?SHARED.sources[k].filters:state.filters),fecha:k==='BCO'?S.ref:reportToday()};
   if(k==='EJC'||k==='EJP'){filters.fechaDesde=filters.fechaDesde||filters.fecha.slice(0,7)+'-01';filters.detallarAplicacion=filters.detallarAplicacion||'true'}
   const dt=D(filters.fecha);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(filters.fecha)||!Number.isFinite(+dt)||iso(dt)!==filters.fecha){state.error=true;state.message='Ingresá una fecha de reporte válida.';renderDat();return}
@@ -1338,6 +1338,13 @@ async function obtainReport(k){
   state.busy=true;state.error=false;state.diagnostics=null;state.message='Preparando la conexión con Finnegans…';renderDat();
   let tokenReady=shared;
   try{
+    if(AUTH.mode==='users'){
+      const deadline=Date.now()+30000;
+      while(WORKSPACE.busy&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+      if(WORKSPACE.busy)throw new Error('Los parámetros todavía se están guardando. Intentá nuevamente.');
+      await flushWorkspaceSave();
+      if(WORKSPACE.mode!=='ready'||WORKSPACE.dirty)throw new Error('No se pudieron guardar los parámetros de esta empresa. Intentá nuevamente.');
+    }
     const token=shared?null:await currentFinnegansToken();
     tokenReady=true;
     filters.fecha=k==='BCO'?S.ref:reportToday();
@@ -1362,7 +1369,7 @@ async function obtainReport(k){
   finally{state.busy=false;renderAll()}
 }
 function apiSection(){
-  if(SHARED.enabled)return `<div class="card api-card"><h2>Conexión compartida con Finnegans</h2><p class="sub">Credenciales configuradas en Vercel · disponibles desde cualquier navegador o computadora con la clave de esta instalación.</p><p class="note">El servidor obtiene un token nuevo por consulta. Client_ID y Client_Secret no se envían al navegador. Los filtros compartidos se administran en Vercel. Las consultas no envían filtro de empresa y recuperan todas las empresas. Con almacenamiento central, las cargas de Excel y simulaciones también quedan compartidas.</p><p class="note">Fuentes habilitadas: ${esc(Object.keys(SHARED.sources).map(k=>SRC[k]?.n||k).join(', ')||'ninguna; falta configurar los filtros restantes de cada reporte en Vercel')}.</p><button type="button" class="btn pri" id="testSharedConnection"${SHARED.busy?' disabled':''}>Probar conexión</button><div class="msg${SHARED.error?' err':''}" role="status">${esc(SHARED.message)}</div></div>`;
+  if(SHARED.enabled)return `<div class="card api-card"><h2>Conexión compartida con Finnegans</h2><p class="sub">Credenciales guardadas en el servidor · disponibles para esta instalación.</p><p class="note">El servidor obtiene un token nuevo por consulta. Client_ID y Client_Secret no se envían al navegador. ${AUTH.mode==='users'?'Los filtros de cada fuente se editan abajo y se guardan por empresa. El filtro Empresa se toma de la empresa seleccionada.':'Los filtros compartidos se administran en Vercel.'}</p><p class="note">Fuentes habilitadas: ${esc(Object.keys(SHARED.sources).map(k=>SRC[k]?.n||k).join(', ')||'ninguna')}.</p><button type="button" class="btn pri" id="testSharedConnection"${SHARED.busy?' disabled':''}>Probar conexión</button><div class="msg${SHARED.error?' err':''}" role="status">${esc(SHARED.message)}</div></div>`;
   const active=!!FAPI.token&&FAPI.expiresAt>Date.now();
   return `<div class="card api-card"><div class="api-heading"><div><h2>Conexión API con Finnegans</h2><p class="sub">Ingresá las credenciales del usuario de integración para obtener el token de acceso.</p></div><span class="api-status${active?' active':''}">${FAPI.busy?'Solicitando token':active?'Token activo':FAPI.clientId&&FAPI.clientSecret?'Credenciales disponibles':'Sin credenciales'}</span></div>
     <form id="finnegansForm" autocomplete="off">
