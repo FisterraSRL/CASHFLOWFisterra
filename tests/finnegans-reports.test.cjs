@@ -141,6 +141,9 @@ test('invalid rows fail the whole import instead of losing part of the balance',
   assert.throws(()=>normalizeReport('CLI',[fixture(),fixture(bad)],'2026-10-15'),/Fila 2/);
  }
 });
+test('unknown supplier currency identifies the value without importing partial balances',()=>{
+ assert.throws(()=>normalizeReport('PRV',[fixture({PROVEEDOR:'P',CUENTA:'PROVEEDORES',MONEDA:'Moneda inesperada'})],'2026-10-15'),/Fila 1: la moneda "Moneda inesperada" no tiene un código reconocido/);
+});
 test('reads Excel-like aliases and reports zero balances and FX residuals',()=>{
  const f={Cliente:'C',Documento:'FV - 1','Fecha comprobante':'2026-09-01','Fecha de vencimiento':'2026-10-01','Importe ppal':'1.250.000,00',Moneda:'Pesos'};
  assert.equal(normalizeReport('CLI',[f],'2026-10-15').rows[0].m,1250000);
