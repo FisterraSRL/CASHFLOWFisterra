@@ -3,15 +3,16 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{
   const html=fs.readFileSync('dist/cashflow.html');
   const company={id:'a0000000-0000-4000-8000-000000000001',code:'EMPRE01',name:'FISTERRA SRL'};
+  const second={id:'a0000000-0000-4000-8000-000000000002',code:'EMPRE02',name:'FISTERRA CHILE S.P.A.'};
   const user={id:'b0000000-0000-4000-8000-000000000001',name:'Administrador',email:'admin@example.com',role:'admin'};
   let revision=0,payload=null;
   const server=http.createServer(async(req,res)=>{
     const json=(status,body,cookie)=>{res.writeHead(status,{'content-type':'application/json',...(cookie?{'set-cookie':cookie}:{})});res.end(JSON.stringify(body))};
     const logged=req.headers.cookie?.includes('cashflow_session=test-session'),noCompany=req.headers.cookie?.includes('cashflow_no_company=1');
     if(req.url==='/api/auth'){
-      if(req.method==='GET')return json(200,logged?{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company]}:{mode:'users',authenticated:false,recoveryAvailable:false});
+      if(req.method==='GET')return json(200,logged?{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company,second]}:{mode:'users',authenticated:false,recoveryAvailable:false});
       let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
-      if(body.action==='login')return body.email===user.email&&body.password==='correct long password'?json(200,{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company]},'cashflow_session=test-session; HttpOnly; Path=/'):json(401,{error:'Email o contraseña incorrectos.'});
+      if(body.action==='login')return body.email===user.email&&body.password==='correct long password'?json(200,{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company,second]},'cashflow_session=test-session; HttpOnly; Path=/'):json(401,{error:'Email o contraseña incorrectos.'});
       if(body.action==='logout')return json(200,{authenticated:false},'cashflow_session=; Max-Age=0; Path=/');
       return json(400,{error:'Acción desconocida.'});
     }
@@ -21,6 +22,16 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       let raw='';for await(const part of req)raw+=part;const next=JSON.parse(raw);payload=next.payload;revision++;return json(200,{revision,updatedAt:new Date().toISOString()});
     }
     if(req.url==='/api/finnegans-config')return json(200,{enabled:true,sources:{CLI:{filters:{cuenta:'DEUDORES'}},PRV:{filters:{}},CHP:{filters:{}},CHT:{filters:{}},EJC:{filters:{}},EJP:{filters:{}},BCO:{filters:{}}}});
+    if(req.url==='/api/consolidated'){
+      let raw='';for await(const part of req)raw+=part;const ids=JSON.parse(raw).companyIds;
+      if(ids.length!==2||ids[0]!==company.id||ids[1]!==second.id)return json(400,{error:'Selección inválida'});
+      const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date());
+      const state=(name,saldo,cobro,pago)=>({saldo,saldoFecha:today,saldoManualSet:true,tc:1000,fx:{},data:{
+        CLI:{rows:[{s:'CLI',id:name+'-CLI',company:name,p:'Cliente',cat:'Cobranza clientes',f:today,m:cobro,c:'ARS'}],at:today},
+        PRV:{rows:[{s:'PRV',id:name+'-PRV',company:name,p:'Proveedor',cat:'Proveedores',f:today,m:-pago,c:'ARS'}],at:today},
+        CHP:{rows:[],lastCheck:{status:'empty'}},CHT:{rows:[],lastCheck:{status:'empty'}},BCO:{rows:[]}}});
+      return json(200,{workspaces:[{company,updatedAt:null,state:state(company.name,100,40,20)},{company:second,updatedAt:null,state:state(second.name,200,60,30)}]});
+    }
     if(req.url==='/api/users')return json(200,{users:[{...user,active:true,company_ids:[company.id]}]});
     if(req.url==='/api/companies')return json(200,{companies:[{...company,active:true}]});
     res.writeHead(200,{'content-type':'text/html;charset=utf-8'});res.end(html);
@@ -55,6 +66,18 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await page.locator('#report-CLI-cuenta').fill('DEUDORES NUEVO');
     await page.waitForFunction(()=>WORKSPACE.revision>0&&WORKSPACE.dirty===false&&WORKSPACE.busy===false);
     assert.equal(payload.filters.CLI.cuenta,'DEUDORES NUEVO');
+    await page.locator('nav.tabs button[data-t="flu"]').click();
+    await page.locator(`[data-cons-company="${second.id}"]`).check();
+    await page.getByText('Flujo de fondos consolidado').waitFor();
+    const flow=await page.locator('#v-flu').innerText();
+    assert.match(flow,/FISTERRA SRL/);assert.match(flow,/FISTERRA CHILE S\.P\.A\./);
+    assert.match(flow,/Saldo inicial conjunto/);assert.match(flow,/350,00/);
+    if(process.env.CONSOLIDATED_SCREENSHOT)await page.screenshot({path:process.env.CONSOLIDATED_SCREENSHOT,fullPage:true});
+    await page.reload();await page.locator('nav.tabs button[data-t="flu"]').waitFor({state:'visible'});
+    await page.locator('nav.tabs button[data-t="flu"]').click();
+    assert.equal(await page.locator(`[data-cons-company="${second.id}"]`).isVisible(),true);
+    assert.equal(await page.locator(`[data-cons-company="${second.id}"]`).evaluate(input=>input.checked),true);
+    await page.getByText('Flujo de fondos consolidado').waitFor();
     const onboarding=await browser.newContext({viewport:{width:1280,height:850}});
     await onboarding.addCookies([{name:'cashflow_no_company',value:'1',url:`http://127.0.0.1:${server.address().port}`}]);
     const adminPage=await onboarding.newPage();await adminPage.goto(`http://127.0.0.1:${server.address().port}`);

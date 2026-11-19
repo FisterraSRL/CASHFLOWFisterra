@@ -9,19 +9,20 @@ const original={mode:process.env.CASHFLOW_AUTH_MODE,readyStore:store.readyStore,
 process.env.CASHFLOW_AUTH_MODE='users';
 const own={id:'a0000000-0000-4000-8000-000000000001',code:'EMPRE01',name:'FISTERRA SRL'};
 const other={id:'a0000000-0000-4000-8000-000000000002',code:'EMPRE02',name:'OTRA EMPRESA'};
-let role='user',seenCompanyId=null,saved=null;
+let role='user',seenCompanyId=null,saved=null,accessible=[own];
 const sql=async()=>[];
 store.readyStore=async()=>sql;
 store.sessionByToken=async(_sql,token)=>token==='valid-token-placeholder-aaaaaaaaaaaaaaaa'?{
   user_id:'b0000000-0000-4000-8000-000000000001',company_id:own.id,name:'Usuario',email:'user@example.com',role,
   company_code:own.code,company_name:own.name}:null;
-store.userCompanies=async()=>[own];
-workspace.readCompanyWorkspace=async companyId=>{seenCompanyId=companyId;return {revision:1,payload:{version:1,state:{data:{CLI:{rows:[]}}},filters:{}},updatedAt:null}};
+store.userCompanies=async()=>accessible;
+let readWorkspace=async companyId=>{seenCompanyId=companyId;return {revision:1,payload:{version:1,state:{data:{CLI:{rows:[]}}},filters:{}},updatedAt:null}};
+workspace.readCompanyWorkspace=(...args)=>readWorkspace(...args);
 workspace.writeCompanyWorkspace=async(companyId,revision,payload)=>{seenCompanyId=companyId;saved=payload;return {revision:revision+1,updatedAt:new Date().toISOString()}};
 shared.sharedConfig=()=>({enabled:true,sources:{CLI:{filters:{empresa:other.code}}},defaults:{}});
 shared.sharedToken=async()=> 'server.token';
-for(const path of ['../lib/auth-session.cjs','../lib/workspace-auth.cjs','../api/workspace.js','../api/users.js','../api/companies.js','../api/finnegans-report.js'])delete require.cache[require.resolve(path)];
-const workspaceHandler=require('../api/workspace.js'),usersHandler=require('../api/users.js'),companiesHandler=require('../api/companies.js'),reportHandler=require('../api/finnegans-report.js');
+for(const path of ['../lib/auth-session.cjs','../lib/workspace-auth.cjs','../api/workspace.js','../api/users.js','../api/companies.js','../api/finnegans-report.js','../api/consolidated.js'])delete require.cache[require.resolve(path)];
+const workspaceHandler=require('../api/workspace.js'),usersHandler=require('../api/users.js'),companiesHandler=require('../api/companies.js'),reportHandler=require('../api/finnegans-report.js'),consolidatedHandler=require('../api/consolidated.js');
 test.after(()=>{Object.assign(store,{readyStore:original.readyStore,sessionByToken:original.sessionByToken,userCompanies:original.userCompanies});
   Object.assign(workspace,{readCompanyWorkspace:original.readCompanyWorkspace,writeCompanyWorkspace:original.writeCompanyWorkspace});
   Object.assign(shared,{sharedConfig:original.sharedConfig,sharedToken:original.sharedToken});global.fetch=original.fetch;
@@ -59,4 +60,20 @@ test('Finnegans query uses the selected company and returns only its rows',async
   assert.equal(result.statusCode,200);assert.deepEqual(queried,[own.code]);
   assert.equal(result.body.rows.length,1);assert.equal(result.body.rows[0].company,own.name);
   assert.equal(result.body.diagnostics.responseBody,'[OCULTO: EL REPORTE INCLUYE OTRAS EMPRESAS]');
+});
+test('consolidated flow reads only assigned companies and never exposes report credentials',async()=>{
+  const second={id:'a0000000-0000-4000-8000-000000000003',code:'EMPRE03',name:'SEGUNDA EMPRESA'};
+  const read=[];
+  accessible=[own,second];
+  readWorkspace=async id=>{read.push(id);return {payload:{state:{ref:'2026-11-19',tc:1000,data:{CLI:{rows:[{company:id===own.id?own.name:second.name,m:100,c:'ARS',cat:'Cobranza clientes',f:'2026-11-20'}]}}},filters:{CLI:{cuenta:'PRIVATE'}}},updatedAt:'2026-11-19T10:00:00Z'}};
+  try{
+    assert.equal((await call(consolidatedHandler,'POST',{companyIds:[own.id,other.id]})).statusCode,403);
+    assert.deepEqual(read,[]);
+    const result=await call(consolidatedHandler,'POST',{companyIds:[own.id,second.id]});
+    assert.equal(result.statusCode,200);assert.deepEqual(read,[own.id,second.id]);
+    assert.equal(result.body.workspaces.length,2);
+    assert.equal(result.body.workspaces[1].state.data.CLI.rows[0].company,second.name);
+    assert.equal(JSON.stringify(result.body).includes('PRIVATE'),false);
+    assert.equal((await call(consolidatedHandler,'POST',{companyIds:[own.id,own.id]})).statusCode,400);
+  }finally{accessible=[own]}
 });

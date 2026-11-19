@@ -92,6 +92,8 @@ section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radiu
 .auth-company-list label{font-weight:400;margin:0}.auth-company-list input{width:auto;min-height:0}
 .auth-admin-grid .auth-status-toggle{display:flex;align-items:center;gap:8px;margin:14px 0}
 .auth-admin-grid .auth-status-toggle input{width:auto;min-height:0}
+.consolidated-picker{margin-bottom:16px}.consolidated-picker .choices{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px}.consolidated-picker label{display:inline-flex;align-items:center;gap:7px;font-size:13px}.consolidated-picker input{accent-color:var(--brand)}
+.consolidated-view .subrow td:first-child{padding-left:24px;color:var(--ink2)}.consolidated-view .company-row td:first-child{font-weight:700}.consolidated-view .note{margin-top:10px}
 .auth-company-details{margin:14px 0}.auth-company-details summary{cursor:pointer;font-weight:700;color:var(--brand)}
 .auth-company-details p{max-height:160px;overflow:auto;line-height:1.8}
 @media(max-width:980px){.auth-admin-grid{grid-template-columns:1fr}}
@@ -302,7 +304,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.27">v1.0.27</span>
+    <span class="app-version" aria-label="Versión 1.0.28">v1.0.28</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
     <div class="auth-userbar" id="authUserbar" hidden></div>
@@ -585,6 +587,104 @@ function buildFlow(){
   let s=openingBalance();const sal={};for(const c of cols){M[c].ini=s;s+=M[c].in+M[c].out;sal[c]=s}
   return{P,cols,M,rows,sal}}
 
+/* ---------- consolidado de empresas autorizadas, solo lectura ---------- */
+const CONS={ids:new Set(),selectionFor:null,key:'',busy:false,workspaces:null,error:''};
+function consolidatedIds(){
+  if(AUTH.mode!=='users'||AUTH.companies.length<2||!AUTH.company)return [];
+  if(CONS.selectionFor!==AUTH.company.id){
+    CONS.selectionFor=AUTH.company.id;CONS.ids=new Set();
+    try{for(const id of JSON.parse(sessionStorage.getItem('cf-consolidated-'+AUTH.company.id)||'[]'))if(typeof id==='string')CONS.ids.add(id)}catch{}
+  }
+  CONS.ids.add(AUTH.company.id);
+  const allowed=new Set(AUTH.companies.map(c=>c.id));
+  for(const id of CONS.ids)if(!allowed.has(id))CONS.ids.delete(id);
+  return AUTH.companies.filter(c=>CONS.ids.has(c.id)).map(c=>c.id);
+}
+function consolidatedPicker(){
+  if(AUTH.mode!=='users'||AUTH.companies.length<2)return '';
+  return `<div class="card consolidated-picker"><h2>Empresas en el flujo</h2><p class="note">Elegí hasta 8 empresas habilitadas. El consolidado suma sus datos guardados y no modifica ninguna empresa.</p><div class="choices">${AUTH.companies.map(c=>`<label><input type="checkbox" data-cons-company="${esc(c.id)}"${CONS.ids.has(c.id)||c.id===AUTH.company.id?' checked':''}${c.id===AUTH.company.id?' disabled':''}> ${esc(c.name)}${c.id===AUTH.company.id?' · actual':''}</label>`).join('')}</div>${CONS.ids.size>1?'<button type="button" class="btn" id="consRefresh">Actualizar vista</button>':''}</div>`;
+}
+function bindConsolidatedPicker(){
+  document.querySelectorAll('[data-cons-company]').forEach(input=>input.onchange=()=>{
+    if(input.checked&&CONS.ids.size>=8){input.checked=false;return}
+    if(input.checked)CONS.ids.add(input.dataset.consCompany);else CONS.ids.delete(input.dataset.consCompany);
+    try{sessionStorage.setItem('cf-consolidated-'+AUTH.company.id,JSON.stringify([...CONS.ids]))}catch{}
+    CONS.key='';CONS.workspaces=null;CONS.error='';renderFlu();
+  });
+  if($('#consRefresh'))$('#consRefresh').onclick=()=>{CONS.key='';CONS.workspaces=null;CONS.error='';renderFlu()};
+}
+function consolidatedCompanyFlow(workspace,cols){
+  const state=workspace.state||{data:{}},company=workspace.company,source=state.data||{},warnings=[];
+  const rate=c=>c==='ARS'?1:c==='USD'?Number(state.tc):Number(state.fx?.[c]);
+  const amount=r=>Number(r.m)*rate(r.c||'ARS');
+  const raw=[];
+  for(const k of ['CLI','CHP','PRE','LEA','ARCA'])for(const r of source[k]?.rows||[])if(k!=='CHP'||!r.conciliado)raw.push(r);
+  const providers=source.PRV?.rows||[],providerGroups=new Map();
+  for(const r of providers){const key=[r.cat,r.company,r.p].join('|');if(!providerGroups.has(key))providerGroups.set(key,[]);providerGroups.get(key).push(r)}
+  for(const list of providerGroups.values())if(list.reduce((sum,r)=>sum+amount(r),0)<=0)raw.push(...list);
+  for(const r of source.CHT?.rows||[])if(!r.conciliado&&(r.e==='En Cartera'||r.e==='Cheque Depositado'&&/depositar/i.test(r.x||'')&&(state.ovr?.[r.id]||r.f)>=S.ref))raw.push({...r,cat:r.e==='En Cartera'?'Cheques en cartera':'Cheques depositados'});
+  const excluded=new Set(state.excl||[]);
+  const movements=raw.map(r=>({...r,f:state.ovr?.[r.id]||r.f})).filter(r=>
+    (S.incChq||!(r.s==='CHP'&&r.f<S.ref))&&!state.inc?.[r.id]&&!excluded.has(r.cat+'|'+r.p)&&!excluded.has(r.cat+'|'+r.p+' · '+(r.company||'')));
+  const needed=[...movements,...providers,...(source.BCO?.at===S.ref?source.BCO.rows||[]:[])].map(r=>r.c||'ARS');
+  const missing=[...new Set(needed.filter(c=>!(rate(c)>0)))];
+  if(missing.length)warnings.push(`${company.name}: faltan cotizaciones de ${missing.join(', ')}.`);
+  let opening=null;
+  if(source.BCO?.rows?.length&&source.BCO.at===S.ref&&!missing.some(c=>(source.BCO.rows||[]).some(r=>r.c===c)))opening=source.BCO.rows.reduce((sum,r)=>sum+amount(r),0);
+  else if(state.saldoFecha===S.ref&&(state.saldoManualSet||state.saldo))opening=Number(state.saldo)||0;
+  else warnings.push(`${company.name}: falta el saldo bancario al ${fd(S.ref)}.`);
+  for(const k of ['CLI','PRV','CHP','CHT']){const d=source[k];if(!d?.rows?.length&&d?.lastCheck?.status!=='empty')warnings.push(`${company.name}: ${SRC[k].n} sin datos.`);else if(d.at&&d.at!==reportToday())warnings.push(`${company.name}: ${SRC[k].n} al ${fd(d.at)}.`)}
+  const cells=Object.fromEntries(cols.map(c=>[c,{in:0,out:0,cats:{}}]));
+  if(!missing.length)for(const r of movements){if(!Number.isFinite(Number(r.m))||!/^\d{4}-\d{2}-\d{2}$/.test(r.f))continue;const c=bucket(r),v=amount(r),cell=cells[c];if(!Number.isFinite(v))continue;cell[isIn(r.cat)?'in':'out']+=v;cell.cats[r.cat]=(cell.cats[r.cat]||0)+v}
+  let running=opening;
+  for(const c of cols){cells[c].opening=running;running=running===null||missing.length?null:running+cells[c].in+cells[c].out;cells[c].closing=running}
+  return {company,opening,cells,warnings,updatedAt:workspace.updatedAt,missingFx:missing.length>0};
+}
+async function loadConsolidated(ids,key){
+  CONS.busy=true;CONS.error='';
+  try{
+    const deadline=Date.now()+30000;
+    while(WORKSPACE.busy&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+    if(WORKSPACE.busy)throw new Error('Los datos todavía se están guardando. Intentá nuevamente.');
+    await flushWorkspaceSave();
+    if(WORKSPACE.dirty||WORKSPACE.mode!=='ready')throw new Error('Guardá los cambios de la empresa actual antes de consolidar.');
+    const response=await fetch('/api/consolidated',{method:'POST',headers:{...workspaceHeaders(),'Content-Type':'application/json'},body:JSON.stringify({companyIds:ids}),cache:'no-store',signal:AbortSignal.timeout(25000)});
+    const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo cargar el consolidado.');
+    if(CONS.key===key)CONS.workspaces=data.workspaces;
+  }catch(error){if(CONS.key===key)CONS.error=error.message||'No se pudo cargar el consolidado.'}
+  finally{if(CONS.key===key){CONS.busy=false;if(S.tab==='flu')renderFlu()}}
+}
+function renderConsolidatedFlu(ids){
+  const v=$('#v-flu'),key=ids.join('|');
+  if(CONS.key!==key){CONS.key=key;CONS.workspaces=null;CONS.error='';loadConsolidated(ids,key)}
+  const picker=consolidatedPicker();
+  if(CONS.busy||!CONS.workspaces){v.innerHTML=picker+`<div class="card" role="status">${esc(CONS.error||'Cargando los datos de las empresas seleccionadas…')}</div>`;bindConsolidatedPicker();return}
+  const cols=['ATR',...periods(),'POST'],list=CONS.workspaces.map(w=>consolidatedCompanyFlow(w,cols));
+  const warnings=list.flatMap(c=>c.warnings),blocked=list.some(c=>c.missingFx),openingMissing=list.some(c=>c.opening===null);
+  const total=Object.fromEntries(cols.map(c=>[c,{in:list.reduce((sum,x)=>sum+x.cells[c].in,0),out:list.reduce((sum,x)=>sum+x.cells[c].out,0),cats:{}}]));
+  for(const c of cols)for(const x of list)for(const [cat,value]of Object.entries(x.cells[c].cats))total[c].cats[cat]=(total[c].cats[cat]||0)+value;
+  let running=list.every(c=>c.opening!==null)&&!blocked?list.reduce((sum,c)=>sum+c.opening,0):null;
+  for(const c of cols){total[c].opening=running;running=running===null?null:running+total[c].in+total[c].out;total[c].closing=running}
+  const fmt=v=>v===null?'s/d':tM(v),head=c=>c==='ATR'?'Atrasado':c==='POST'?'Posterior':plabel(c);
+  const line=(label,values,cls='')=>`<tr class="${cls}"><td>${esc(label)}</td>${cols.map(c=>`<td>${fmt(values(c))}</td>`).join('')}<td>${fmt(blocked?null:cols.reduce((sum,c)=>sum+(values(c)||0),0))}</td></tr>`;
+  const balance=(label,field,cls)=>`<tr class="${cls}"><td>${esc(label)}</td>${cols.map(c=>`<td>${fmt(total[c][field])}</td>`).join('')}<td></td></tr>`;
+  const companyRows=list.map(x=>`<tr class="company-row"><td>${esc(x.company.name)}</td>${cols.map(c=>`<td>${fmt(blocked?null:x.cells[c].closing)}</td>`).join('')}<td></td></tr>`).join('');
+  v.innerHTML=picker+`<div class="consolidated-view"><div class="toolbar"><div><div class="h2">Flujo de fondos consolidado</div><div class="note">${list.length} empresas · importes en ${amountUnitLabel()} · fecha de corte ${fd(S.ref)} · vista de solo lectura</div></div></div>
+  ${warnings.length?`<div class="banner" role="status"><span class="chip" style="color:var(--crit)">Revisar datos</span><span>${blocked?'Faltan cotizaciones; completalas en cada empresa para calcular el consolidado.':openingMissing?'Falta el saldo inicial de una o más empresas; los saldos finales se muestran como s/d.':'Revisá las fechas y fuentes de cada empresa antes de usar la proyección.'}</span></div><details class="card"><summary>Ver ${warnings.length} observaciones</summary><ul>${warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}
+  <div class="tblwrap"><table><thead><tr><th>Concepto</th>${cols.map(c=>`<th>${head(c)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+  ${balance('Saldo inicial conjunto','opening','tot')}
+  ${line('Ingresos',c=>blocked?null:total[c].in,'sec')}
+  ${list.map(x=>line(x.company.name,c=>blocked?null:x.cells[c].in,'subrow')).join('')}
+  ${CATS_IN.filter(cat=>cols.some(c=>total[c].cats[cat])).map(cat=>line(cat,c=>blocked?null:total[c].cats[cat]||0,'subrow')).join('')}
+  ${line('Egresos',c=>blocked?null:total[c].out,'sec')}
+  ${list.map(x=>line(x.company.name,c=>blocked?null:x.cells[c].out,'subrow')).join('')}
+  ${CATS_OUT.filter(cat=>cols.some(c=>total[c].cats[cat])).map(cat=>line(cat,c=>blocked?null:total[c].cats[cat]||0,'subrow')).join('')}
+  ${line('Flujo neto',c=>blocked?null:total[c].in+total[c].out,'tot')}
+  ${balance('Saldo final conjunto','closing','saldo')}${companyRows}
+  </tbody></table></div><p class="note">Cada saldo por empresa incluye sus propios movimientos y cotizaciones. Para cambiar vencimientos, exclusiones o cotizaciones, abrí esa empresa en el selector superior. «Actualizar vista» relee lo guardado sin llamar a Finnegans.</p></div>`;
+  bindConsolidatedPicker();
+}
+
 /* ---------- drawer ---------- */
 let DR=null;
 function openDrawer(title,items,sub){
@@ -740,6 +840,7 @@ function flowDocNumber(r){
 function orgTree(){const T={};for(const r of allMovs()){if(!S.incChq&&chpPend(r))continue;const b=bucket(r),v=ars(r);
   const c=(T[r.cat]||(T[r.cat]={}));const p=r.orgLabel||r.p,o=(c[p]||(c[p]={t:0,it:0,n:0,ni:0,cols:{},icols:{}}));o.n++;const K=r.inc?'icols':'cols';if(r.inc){o.it+=v;o.ni++}else o.t+=v;(o[K][b]||(o[K][b]={v:0,items:[]}));o[K][b].v+=v;o[K][b].items.push(r)}return T}
 function renderFlu(){
+  const consolidated=consolidatedIds();if(consolidated.length>1){renderConsolidatedFlu(consolidated);return}
   const sx=($('#v-flu .tblwrap')||{}).scrollLeft||0;
   const F=buildFlow(),v=$('#v-flu'),T=orgTree(),ex=new Set(S.excl||[]);S.exp=S.exp||{};S.more=S.more||{};S.expO=S.expO||{};
   const missingComprobante=allMovs().some(r=>(r.s==='CLI'||r.s==='PRV')&&!r.comprobante);
@@ -776,7 +877,7 @@ function renderFlu(){
   const bodyIn=catsIn.map(catBlock).join(''),bodyOut=catsOut.map(catBlock).join('');
   const IM={};let incT=0,incN=0;for(const r of allMovs()){if(!r.inc)continue;const b=bucket(r),x=ars(r);(IM[b]||(IM[b]={v:0,items:[]}));IM[b].v+=x;IM[b].items.push(r);incT+=x;incN++}
   const memo=incN?`<tr class="memo"><td class="cat">Incobrables (no suman) <span class="cnt">${incN}</span></td>${F.cols.map(c=>IM[c]?`<td class="clk incv${atr(c)}" tabindex="0" data-im="${c}">(${tM(IM[c].v)})</td>`:`<td class="z${atr(c)}">–</td>`).join('')}<td class="incv">(${tM(incT)})</td></tr>`:'';
-  v.innerHTML=`<div class="toolbar"><div><div class="h2">Flujo de fondos proyectado</div><div class="note">Importes en ${amountUnitLabel()} · monedas convertidas con las cotizaciones de Datos y fuentes · tocá un importe para ver los comprobantes</div></div>
+  v.innerHTML=consolidatedPicker()+`<div class="toolbar"><div><div class="h2">Flujo de fondos proyectado</div><div class="note">Importes en ${amountUnitLabel()} · monedas convertidas con las cotizaciones de Datos y fuentes · tocá un importe para ver los comprobantes</div></div>
    <div class="ftools"><div class="fld"><label>Vista</label><div class="seg" id="fV"><button data-v="res" aria-pressed="${view==='res'}">Resumida</button><button data-v="org" aria-pressed="${view==='org'}">Por organización</button></div></div>
    <div class="fld"><label for="fQ">Buscar organización</label><input id="fQ" type="search" value="${esc(S.fq||'')}" placeholder="Cliente, proveedor, banco" style="width:220px"></div>
    ${ex.size?`<div class="fld"><label>Excluidas</label><button class="btn" id="fAll">Incluir las ${ex.size}</button></div>`:''}</div></div>
@@ -791,6 +892,7 @@ function renderFlu(){
   </tbody></table></div>
   <p class="note">Desplegá una fila con ▸ para ver qué clientes, proveedores o bancos la componen, y cada organización para ver sus documentos. El número de cada comprobante o cheque aparece junto a su tilde de selección. Solo los documentos con AsientoItemID de Finnegans permiten cambiar la fecha; los demás muestran una fecha de solo lectura. Seleccioná cobros y usá la acción general para marcarlos como incobrables: siguen a la vista, entre paréntesis, pero no suman a los ingresos. Desmarcar una organización la saca de todos los totales, el resumen y las alertas. “Atrasado” reúne lo vencido antes del ${fd(S.ref)}; “Posterior”, lo que vence después del horizonte.${S.incChq?'':' Los cheques emitidos vencidos sin conciliar no se incluyen.'}</p>`;
   const setEx=(keys,on)=>{const s=new Set(S.excl||[]);keys.forEach(k=>on?s.delete(k):s.add(k));S.excl=[...s];save();renderAll()};
+  bindConsolidatedPicker();
   const tw=v.querySelector('.tblwrap');if(tw)tw.scrollLeft=sx;
   v.querySelectorAll('td.clk[data-cat]').forEach(td=>{const go=()=>{const o=F.rows[td.dataset.cat][td.dataset.c];openDrawer(td.dataset.cat+' · '+hdr(td.dataset.c),o.items,'')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
   v.querySelectorAll('td.clk[data-oi]').forEach(td=>{const go=()=>{const o=OK[+td.dataset.oi];openDrawer(o.p+' · '+hdr(td.dataset.c),o.o.cols[td.dataset.c].items,o.cat+' ·')};td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});

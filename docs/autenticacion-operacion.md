@@ -40,6 +40,7 @@ La tabla anterior `cashflow_workspace` no se modifica ni se elimina.
 - `GET/POST/PATCH /api/companies`: catálogo de empresas, solo administradores. `POST {"action":"sync"}` consulta `empresaSucursal/list` con un token obtenido en el servidor y sincroniza únicamente las empresas activas.
 - `GET/POST /api/migrate`: vista previa y copia por empresa desde el workspace anterior, solo administradores.
 - `/api/workspace`, `/api/finnegans-config`, `/api/finnegans-report` y `/api/finnegans-date-change`: exigen sesión y empresa seleccionada en modo nuevo. El workspace usa siempre el ID de empresa de la sesión. Cada fuente conserva sus filtros editables por empresa; el servidor agrega automáticamente el código de la empresa seleccionada como parámetro `Empresa` y comprueba que las filas devueltas correspondan a ella.
+- `POST /api/consolidated`: lee hasta ocho espacios de empresas asignadas al usuario para mostrar un flujo conjunto. No modifica los espacios ni consulta Finnegans. La vista usa una fecha de corte, un horizonte y una agrupación comunes; cada empresa aporta sus propios movimientos, escenarios, cotizaciones y saldo inicial. Si falta una cotización, no muestra importes parciales; si falta un saldo inicial, muestra `s/d` en los saldos finales.
 
 ## Recuperación por correo
 
