@@ -453,7 +453,7 @@ async function loadAuth(){
     const data=await response.json();if(data.mode!=='users'){AUTH.mode='legacy';return loadWorkspace()}
     AUTH.mode='users';AUTH.user=data.user||null;AUTH.company=data.company||null;AUTH.companies=data.companies||[];AUTH.recoveryAvailable=!!data.recoveryAvailable;
     if(!data.authenticated)return showAuthGate(new URLSearchParams(location.search).has('reset')?'reset':'login');
-    if(!AUTH.company)return showAuthGate('company',AUTH.companies.length?'':'No tenés empresas habilitadas. Pedile a un administrador que te asigne una.');
+    if(!AUTH.company)return showAuthGate('company',AUTH.companies.length||AUTH.user?.role==='admin'?'':'No tenés empresas habilitadas. Pedile a un administrador que te asigne una.');
     return loadWorkspace();
   }catch(error){showAuthGate('login',error.message||'No se pudo verificar el acceso.')}
 }
@@ -1560,7 +1560,7 @@ $('#workspaceEmpty').onclick=()=>initializeWorkspace(true);
 $('#workspaceRetry').onclick=loadWorkspace;
 $('#authShowPassword').onclick=()=>{const input=$('#authPassword');input.type=input.type==='password'?'text':'password';$('#authShowPassword').textContent=input.type==='password'?'Mostrar':'Ocultar'};
 $('#authShowNewPassword').onclick=()=>{const input=$('#authNewPassword');input.type=input.type==='password'?'text':'password';$('#authShowNewPassword').textContent=input.type==='password'?'Mostrar':'Ocultar'};
-$('#authLoginForm').onsubmit=async e=>{e.preventDefault();try{const data=await authRequest({action:'login',email:$('#authEmail').value,password:$('#authPassword').value});AUTH.user=data.user;AUTH.company=data.company;AUTH.companies=data.companies;if(!AUTH.company)return showAuthGate('company',AUTH.companies.length?'':'No tenés empresas habilitadas.');loadWorkspace()}catch(error){showAuthGate('login',error.message)}};
+$('#authLoginForm').onsubmit=async e=>{e.preventDefault();try{const data=await authRequest({action:'login',email:$('#authEmail').value,password:$('#authPassword').value});AUTH.user=data.user;AUTH.company=data.company;AUTH.companies=data.companies;if(!AUTH.company)return showAuthGate('company',AUTH.companies.length||AUTH.user?.role==='admin'?'':'No tenés empresas habilitadas.');loadWorkspace()}catch(error){showAuthGate('login',error.message)}};
 $('#authForgot').onclick=()=>showAuthGate('recovery',AUTH.recoveryAvailable?'':'La recuperación por correo aún no está configurada. Solicitá ayuda al administrador.');
 document.querySelectorAll('[data-auth-back]').forEach(button=>button.onclick=()=>{history.replaceState({},'',location.pathname);showAuthGate('login')});
 $('#authRecoveryForm').onsubmit=async e=>{e.preventDefault();try{const result=await authRequest({action:'request-reset',email:$('#authRecoveryEmail').value});showAuthGate('recovery',result.message)}catch(error){showAuthGate('recovery',error.message)}};
