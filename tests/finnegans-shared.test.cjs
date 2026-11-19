@@ -13,7 +13,7 @@ async function invoke(handler,body={},method='POST',headers={}){
 }
 test('public shared configuration exposes only whitelisted filters, never credentials',()=>configured(async()=>{
  const r=await invoke(configHandler,{},'GET');assert.equal(r.statusCode,200);assert.equal(r.body.enabled,true);
- assert.deepEqual(r.body.sources.CLI.filters,{cuenta:'DxVta',moneda:'PES',empresa:'E1'});
+ assert.deepEqual(r.body.sources.CLI.filters,{cuenta:'DxVta',moneda:'PES'});
  assert.ok(!JSON.stringify(r.body).includes('shared-id'));assert.ok(!JSON.stringify(r.body).includes('shared-secret'));
  assert.equal(r.headers['Cache-Control'],'no-store, private');
 }));
@@ -22,10 +22,10 @@ test('missing credentials disable shared mode; incomplete scope disables the sou
  process.env.FINNEGANS_CLI_FILTERS='{}';assert.equal(sharedConfig().sources.CLI,undefined);
  process.env.FINNEGANS_CLI_FILTERS='invalid JSON';assert.equal(sharedConfig().sources.CLI,undefined);
 },{FINNEGANS_CLIENT_SECRET:''}));
-test('bank company can be supplied as a non-secret default without server credentials',()=>configured(async()=>{
+test('bank company is not exposed as a default or used as a filter',()=>configured(async()=>{
  const config=sharedConfig();
  assert.equal(config.enabled,false);
- assert.deepEqual(config.defaults.BCO,{empresa:'EMPRE01'});
+ assert.equal(config.defaults.BCO,undefined);
  assert.equal(config.sources.BCO,undefined);
 },{FINNEGANS_CLIENT_SECRET:'',FINNEGANS_BCO_FILTERS:'{"empresa":"EMPRE01"}'}));
 test('shared requests obtain fresh tokens server-side and cannot override company/account/date',()=>configured(async()=>{
@@ -35,7 +35,7 @@ test('shared requests obtain fresh tokens server-side and cannot override compan
   if(u.pathname==='/api/oauth/token'){
    assert.equal(options.headers.authorization,'Basic shared-secret');assert.equal(new URLSearchParams(options.body).get('client_id'),'shared-id');return new Response('server.token.'+(++count));
   }
-  assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_cuenta'),'PRV');
+  assert.equal(u.searchParams.has('PARAMWEBREPORT_Empresa'),false);assert.equal(u.searchParams.get('PARAMWEBREPORT_cuenta'),'PRV');
   assert.equal(u.searchParams.get('PARAMWEBREPORT_fecha'),new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date()));
   used.push(u.searchParams.get('ACCESS_TOKEN'));
   return new Response(JSON.stringify([{ORGANIZACION:'Proveedor de prueba',DOCUMENTO:'FC-1',FECHA:'01-10-2026',FECHAVTO:'31-10-2026',CUENTA:'Proveedores en Cta. Cte.',MONEDA:'Pesos',IMPORTEMONPPAL:-100}]));
@@ -47,14 +47,14 @@ test('shared requests obtain fresh tokens server-side and cannot override compan
  }
  assert.deepEqual(used,['server.token.1','server.token.2']);
 }));
-test('shared bank report uses the requested cut-off date and optional server company filter',()=>configured(async()=>{
+test('shared bank report uses the requested cut-off date without a company filter',()=>configured(async()=>{
  const before=process.env.FINNEGANS_BCO_FILTERS;
  process.env.FINNEGANS_BCO_FILTERS=JSON.stringify({empresa:'E1'});
  global.fetch=async url=>{
   const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.bank.token');
   assert.equal(u.pathname,'/api/reports/SaldoCuentasBanco');
   assert.equal(u.searchParams.get('PARAMETER_FechaCorte'),'2026-11-10');
-  assert.equal(u.searchParams.get('PARAMETER_Empresa'),'E1');
+  assert.equal(u.searchParams.has('PARAMETER_Empresa'),false);
   return new Response(JSON.stringify([{Empresa:'E1',Cuenta:'CC 1',Moneda:'ARS',Saldo:100,FechaCorte:'2026-11-10'}]));
  };
  try{
@@ -75,7 +75,7 @@ test('shared own cheque requests keep configured type, scope and a server-side t
  global.fetch=async(url)=>{
   const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.token');
   assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');assert.equal(u.searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
-  assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'BANCO');assert.equal(u.searchParams.get('PARAMWEBREPORT_MostrarSoloNoConciliados'),'true');
+  assert.equal(u.searchParams.has('PARAMWEBREPORT_Empresa'),false);assert.equal(u.searchParams.get('PARAMWEBREPORT_CuentaContable'),'BANCO');assert.equal(u.searchParams.get('PARAMWEBREPORT_MostrarSoloNoConciliados'),'true');
   return new Response(JSON.stringify([{RAZONSOCIAL:'Tercero',NUMERO:1,FECHAVTO:'20-11-2026',IMPMONEDATRANS:100,ESTADO:'Emitido'}]));
  };
  const r=await invoke(reportHandler,{source:'CHP',shared:true,filters:{empresa:'OTHER',tipoCheque:'2'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].m,-100);assert.ok(!JSON.stringify(r.body).includes('server.token'));
@@ -94,15 +94,15 @@ test('shared third party cheques use type 1 and server-defined filters',()=>conf
  try{const r=await invoke(reportHandler,{source:'CHT',shared:true,filters:{tipoCheque:'0',cuenta:'OTHER'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].s,'CHT');assert.equal(r.body.rows[0].m,1000);assert.equal(r.body.rows[0].e,'En Cartera');assert.ok(!JSON.stringify(r.body).includes('server.third.token'))}finally{if(before===undefined)delete process.env.FINNEGANS_CHT_FILTERS;else process.env.FINNEGANS_CHT_FILTERS=before}
 }));
 
-test('shared collections require company but no account and lock the report scope',()=>configured(async()=>{
+test('shared collections omit company but preserve the report period',()=>configured(async()=>{
  const before=process.env.FINNEGANS_EJC_FILTERS,day=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date()),from=day.slice(0,7)+'-01';
  process.env.FINNEGANS_EJC_FILTERS=JSON.stringify({empresa:'E1',fechaDesde:from,detallarAplicacion:'true'});
- global.fetch=async(url)=>{const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.collection.token');assert.equal(u.pathname,'/api/reports/analisisCobranza');assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaDesde'),from);return new Response(JSON.stringify([{TIPOOP:'OPT',FECHACOBRANZA:day,DOCUMENTO:'COB-1',CUENTA:'Banco de prueba',TERCERO:'Cliente',IMPORTE:1000}]))};
+ global.fetch=async(url)=>{const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.collection.token');assert.equal(u.pathname,'/api/reports/analisisCobranza');assert.equal(u.searchParams.has('PARAMWEBREPORT_Empresa'),false);assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaDesde'),from);return new Response(JSON.stringify([{TIPOOP:'OPT',FECHACOBRANZA:day,DOCUMENTO:'COB-1',CUENTA:'Banco de prueba',TERCERO:'Cliente',IMPORTE:1000}]))};
  try{assert.ok(sharedConfig().sources.EJC);const r=await invoke(reportHandler,{source:'EJC',shared:true,filters:{empresa:'OTHER',fechaDesde:'2020-01-01'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].imp,1000);assert.equal(r.body.rows[0].mes,day.slice(0,7));assert.ok(!JSON.stringify(r.body).includes('server.collection.token'))}finally{if(before===undefined)delete process.env.FINNEGANS_EJC_FILTERS;else process.env.FINNEGANS_EJC_FILTERS=before}
 }));
 
-test('shared payments lock supplier, company and date scope without requiring an account',()=>configured(async()=>{
+test('shared payments lock supplier and date scope without filtering company',()=>configured(async()=>{
  const before=process.env.FINNEGANS_EJP_FILTERS,day=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date()),from=day.slice(0,7)+'-01';process.env.FINNEGANS_EJP_FILTERS=JSON.stringify({empresa:'E1',proveedor:'PRV1',fechaDesde:from});
- global.fetch=async(url)=>{const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.payment.token');assert.equal(u.pathname,'/api/reports/AnalisisOrdenPago');assert.equal(u.searchParams.get('PARAMWEBREPORT_Proveedor'),'PRV1');assert.equal(u.searchParams.get('PARAMWEBREPORT_Empresa'),'E1');assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaDesde'),from);return new Response(JSON.stringify([{TIPOOP:'OPT',FECHA:day,DOCUMENTO:'PAGO-1',CUENTA:'Banco de prueba',IMPORTE:1000}]))};
+ global.fetch=async(url)=>{const u=new URL(url);if(u.pathname==='/api/oauth/token')return new Response('server.payment.token');assert.equal(u.pathname,'/api/reports/AnalisisOrdenPago');assert.equal(u.searchParams.get('PARAMWEBREPORT_Proveedor'),'PRV1');assert.equal(u.searchParams.has('PARAMWEBREPORT_Empresa'),false);assert.equal(u.searchParams.get('PARAMWEBREPORT_FechaDesde'),from);return new Response(JSON.stringify([{TIPOOP:'OPT',FECHA:day,DOCUMENTO:'PAGO-1',CUENTA:'Banco de prueba',IMPORTE:1000}]))};
  try{assert.ok(sharedConfig().sources.EJP);const r=await invoke(reportHandler,{source:'EJP',shared:true,filters:{empresa:'OTHER',proveedor:'OTHER'}});assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].s,'EJP');assert.equal(r.body.summary.total,1000);assert.ok(!JSON.stringify(r.body).includes('server.payment.token'))}finally{if(before===undefined)delete process.env.FINNEGANS_EJP_FILTERS;else process.env.FINNEGANS_EJP_FILTERS=before}
 }));

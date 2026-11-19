@@ -19,8 +19,9 @@ module.exports=async function handler(req,res){
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>24000)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
   const shared=usersEnabled()||body?.shared===true,config=shared?sharedConfig():null;
   if(shared&&(!Object.hasOwn(REPORTS,body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros en Vercel.'});
-  // Shared callers can never widen the configured company/account scope.
-  if(shared)body.filters={...config.sources[body.source].filters,...(usersEnabled()?{empresa:req.cashflowAuth.company.code}:{}),fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
+  // Company is intentionally omitted from every Finnegans request. In users
+  // mode the server filters the complete response before returning any rows.
+  if(shared)body.filters={...config.sources[body.source].filters,fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
   let token=body?.access_token;
   if(shared){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
   if(typeof token!=='string'||!token||token.length>16384||!/^[A-Za-z0-9._~+\/-]+=*$/.test(token))return res.status(400).json({error:'Obtené un token válido antes de consultar el reporte.'});
@@ -30,6 +31,10 @@ module.exports=async function handler(req,res){
     const response=await fetch(url,{method:'GET',redirect:'error',headers:{accept:'application/json'},signal:AbortSignal.timeout(25000)});
     const text=await response.text();
     const diagnostics=reportDiagnostics(url,response,text,token);
+    if(usersEnabled()){
+      diagnostics.responseBody='[OCULTO: EL REPORTE INCLUYE OTRAS EMPRESAS]';
+      diagnostics.responseTruncated=false;diagnostics.responseCharacters=0;
+    }
     const fail=(status,error)=>res.status(status).json({error,diagnostics});
     if(!response.ok){
       if(response.status===401||response.status===403)return fail(401,'Finnegans rechazó el acceso. Renová el token y verificá los permisos del usuario.');
@@ -45,7 +50,18 @@ module.exports=async function handler(req,res){
     try{normalized=normalizeReport(body.source,payload,body.filters.fecha,body.filters)}catch(error){return fail(422,error.message)}
     if(usersEnabled()){
       const allowed=new Set([companyName(req.cashflowAuth.company.name),companyName(req.cashflowAuth.company.code)]);
-      if([...normalized.rows,...(normalized.applications||[])].some(row=>!allowed.has(companyName(row.company))))return fail(422,'El reporte contiene movimientos sin empresa identificable o de otra empresa. No se modificaron los datos anteriores.');
+      if([...normalized.rows,...(normalized.applications||[])].some(row=>!companyName(row.company)))return fail(422,'El reporte contiene movimientos sin empresa identificable. No se modificaron los datos anteriores.');
+      normalized.rows=normalized.rows.filter(row=>allowed.has(companyName(row.company)));
+      if(normalized.applications)normalized.applications=normalized.applications.filter(row=>allowed.has(companyName(row.company)));
+      normalized.received=normalized.rows.length+(normalized.applications?.length||0);
+      if(normalized.summary){
+        const sum=rows=>Math.round(rows.reduce((total,row)=>total+row.imp,0)*100)/100;
+        normalized.summary={records:normalized.rows.length,applicationRecords:normalized.applications.length,
+          total:sum(normalized.rows),withholdings:sum(normalized.rows.filter(row=>row.kind==='withholding')),
+          cheques:sum(normalized.rows.filter(row=>row.kind==='cheque')),
+          banks:sum(normalized.rows.filter(row=>row.kind==='bank'))};
+      }
+      normalized.warnings=[];
     }
     if(Buffer.byteLength(JSON.stringify({...normalized,diagnostics}))>4*1024*1024)return fail(413,'El reporte es demasiado grande. Acotá los filtros.');
     return res.status(200).json({...normalized,source:body.source,date:body.filters.fecha,diagnostics});

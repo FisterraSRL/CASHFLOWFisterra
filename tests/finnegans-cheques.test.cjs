@@ -6,7 +6,7 @@ const cheque=(extra={})=>({RAZONSOCIAL:'Proveedor de prueba',NUMERO:'00123',DOCU
 test('own cheque URL always fixes type 0 even if a previous saved type was 1',()=>{
  const u=reportUrl('CHP',{fecha:'2026-11-10',estado:'EMI',organizacion:'A&B',circuitocontable:'CC',cuenta:'BANK',empresa:'E1',fechaVencimientoDesde:'2020-10-31',fechaVencimientoHasta:'2026-12-31',mostrarSoloNoConciliados:'false',tipoCheque:'1'},'test.token');
  assert.equal(u.pathname,'/api/reports/ApiSituacionCheques');
- assert.deepEqual(Object.fromEntries(u.searchParams),{ACCESS_TOKEN:'test.token',PARAMWEBREPORT_FechaHasta:'2026-11-10',PARAMWEBREPORT_TipoCheque:'0',PARAMWEBREPORT_MostrarSoloNoConciliados:'false',PARAMWEBREPORT_Estado:'EMI',PARAMWEBREPORT_Organizacion:'A&B',PARAMWEBREPORT_CircuitoContable:'CC',PARAMWEBREPORT_CuentaContable:'BANK',PARAMWEBREPORT_Empresa:'E1',PARAMWEBREPORT_FechaVencimientoDesde:'2020-10-31',PARAMWEBREPORT_FechaVencimientoHasta:'2026-12-31'});
+ assert.deepEqual(Object.fromEntries(u.searchParams),{ACCESS_TOKEN:'test.token',PARAMWEBREPORT_FechaHasta:'2026-11-10',PARAMWEBREPORT_TipoCheque:'0',PARAMWEBREPORT_MostrarSoloNoConciliados:'false',PARAMWEBREPORT_Estado:'EMI',PARAMWEBREPORT_Organizacion:'A&B',PARAMWEBREPORT_CircuitoContable:'CC',PARAMWEBREPORT_CuentaContable:'BANK',PARAMWEBREPORT_FechaVencimientoDesde:'2020-10-31',PARAMWEBREPORT_FechaVencimientoHasta:'2026-12-31'});
  assert.equal(u.searchParams.has('PARAMWEBREPORT_fecha'),false);
  assert.equal(reportUrl('CHP',{fecha:'2026-11-10'},'token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');
  assert.equal(reportUrl('CHP',{fecha:'2026-11-10',tipoCheque:'0'},'token').searchParams.get('PARAMWEBREPORT_TipoCheque'),'0');

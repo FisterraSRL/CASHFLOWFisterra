@@ -14,7 +14,7 @@ test('migration copies only one company, preserves its scenarios and leaves the 
   assert.deepEqual(result.payload.state.data.PRV.rows.map(r=>r.id),['PRV-1']);
   assert.deepEqual(result.payload.state.ovr,{'CLI-1':'2026-12-01'});
   assert.deepEqual(Object.keys(result.payload.state.dateChanges),['CLI|1']);
-  assert.equal(result.payload.state.saldo,0);assert.equal(result.payload.filters.CLI.empresa,'EMPRE01');
+  assert.equal(result.payload.state.saldo,0);assert.equal(Object.hasOwn(result.payload.filters.CLI,'empresa'),false);
   assert.equal(payload.state.data.CLI.rows.length,3);
   assert.equal(result.payload.vault,undefined);
 });

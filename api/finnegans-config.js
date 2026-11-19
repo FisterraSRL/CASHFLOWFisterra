@@ -1,7 +1,6 @@
 'use strict';
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 const {authorize}=require('../lib/workspace-auth.cjs');
-const {usersEnabled}=require('../lib/auth-session.cjs');
 module.exports=async function(req,res){
   res.setHeader('Cache-Control','no-store, private');res.setHeader('Vercel-CDN-Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -9,10 +8,6 @@ module.exports=async function(req,res){
   if(!await authorize(req,res))return;
   if(req.method==='GET'){
     const config=sharedConfig();
-    if(usersEnabled()){
-      for(const source of Object.values(config.sources))source.filters.empresa=req.cashflowAuth.company.code;
-      config.defaults.BCO={empresa:req.cashflowAuth.company.code};
-    }
     return res.status(200).json(config);
   }
   if(req.method==='POST'){

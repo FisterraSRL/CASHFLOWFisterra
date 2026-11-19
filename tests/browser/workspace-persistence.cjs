@@ -13,7 +13,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       if(next.revision!==revision)return json(409,{error:'Estado modificado en otro equipo'});
       payload=next.payload;revision++;return json(200,{revision,updatedAt:'2026-11-10T12:00:00Z'});
     }
-    if(req.url==='/api/finnegans-config')return json(200,sharedConfig?{enabled:true,sources:{PRV:{filters:{empresa:'EMPRE01',cuenta:'PRV'}}}}:{enabled:false,sources:{}});
+    if(req.url==='/api/finnegans-config')return json(200,sharedConfig?{enabled:true,sources:{PRV:{filters:{cuenta:'PRV'}}}}:{enabled:false,sources:{}});
     if(req.url==='/api/finnegans-report'||req.url==='/api/finnegans-token'){reportCalls++;return json(500,{error:'No debe consultarse al abrir'});}
     res.writeHead(200,{'content-type':'text/html;charset=utf-8'});res.end(html);
   });
@@ -39,7 +39,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await a.locator('#fx-CLP').fill('1,5');await a.locator('#fx-CLP').dispatchEvent('change');
     assert.equal(await a.evaluate(()=>ars({m:10,c:'MXN'})),800);
     await a.getByText('Parámetros de composición de saldos').first().click();
-    await a.locator('#report-CLI-empresa').fill('EMPRE01');
+    await a.locator('#report-CLI-cuenta').fill('DEUDORES');
     await a.locator('[data-ex=EJC]').click();await settled(a);
     await a.evaluate(()=>{S.data.CLI.rows=[{s:'CLI',id:'CLI-shared',asientoItemId:1369927,transaccionId:374684,f:'2026-11-20',m:1000,c:'ARS',p:'Cliente compartido',doc:'Factura',cat:'Cobranza clientes'}];setDate('CLI-shared','2026-11-28')});
     await settled(a);
@@ -50,7 +50,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await settled(a);
     assert.equal(payload.vault.mode,'set');
     assert.ok(!JSON.stringify(payload).includes('test-client-secret'));
-    assert.equal(payload.state.saldo,1000);assert.deepEqual(payload.state.fx,{MXN:80,CLP:1.5});assert.equal(payload.filters.CLI.empresa,'EMPRE01');assert.ok(payload.state.data.EJC.rows.length>0);
+    assert.equal(payload.state.saldo,1000);assert.deepEqual(payload.state.fx,{MXN:80,CLP:1.5});assert.equal(payload.filters.CLI.cuenta,'DEUDORES');assert.equal(Object.hasOwn(payload.filters.CLI,'empresa'),false);assert.ok(payload.state.data.EJC.rows.length>0);
     assert.equal(payload.state.dateChanges['CLI|1369927'].date,'2026-11-28');
     const firstRevision=revision;
 
@@ -61,7 +61,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     assert.equal(await b.evaluate(()=>allMovs().find(r=>r.id==='CLI-shared').f),'2026-11-28');
     await b.locator('[data-t=dat]').click();await b.getByText('Parámetros de composición de saldos').first().click();
     assert.equal(await b.evaluate(()=>ars({m:10,c:'CLP'})),15);
-    assert.equal(await b.locator('#report-CLI-empresa').inputValue(),'EMPRE01');
+    assert.equal(await b.locator('#report-CLI-cuenta').inputValue(),'DEUDORES');
     await b.getByText('Credenciales compartidas recuperadas.').waitFor();
     assert.equal(await b.locator('#apiClientId').inputValue(),'test-client-id');
     assert.equal(await b.locator('#apiClientSecret').inputValue(),'test-client-secret');
