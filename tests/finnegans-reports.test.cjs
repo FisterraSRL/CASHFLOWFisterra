@@ -94,11 +94,19 @@ test('Fecha and FechaVto are dates while Vencimiento and Venc. preserve text',()
  assert.throws(()=>normalizeReport('CLI',[fixture({FECHAVTO:'invalid',Vencimiento:'A vencer',FechaVencimientoActual:'2026-10-20'})],'2026-10-15'),/campo FechaVto no contiene una fecha válida/);
 });
 
+test('uses FechaCashflow before FechaVto for customer and supplier balances',()=>{
+ for(const source of ['CLI','PRV']){
+  const base=fixture({CUENTA:'PROVEEDORES',FECHAVTO:'31-10-2026'});
+  assert.equal(normalizeReport(source,[{...base,FECHACASHFLOW:'12-11-2026'}],'2026-10-15').rows[0].f,'2026-11-12');
+  for(const empty of [null,'','   '])assert.equal(normalizeReport(source,[{...base,FECHACASHFLOW:empty}],'2026-10-15').rows[0].f,'2026-10-31');
+  assert.throws(()=>normalizeReport(source,[{...base,FECHACASHFLOW:'fecha inválida'}],'2026-10-15'),/campo FechaCashflow no contiene una fecha válida/);
+ }
+});
 test('accepts Finnegans DD-MM-YYYY dates without parsing VENCIMIENTO text',async()=>{
  const payload=[fixture({FECHA:'13-08-2026',FECHAVTO:'12-09-2026',VENCIMIENTO:'Vencido 1 a 2 meses',FECHACASHFLOW:'08-10-2026'})];
  const r=await invoke(req(),async()=>new Response(JSON.stringify(payload)));
  assert.equal(r.statusCode,200);assert.equal(r.body.rows[0].fc,'2026-08-13');
- assert.equal(r.body.rows[0].f,'2026-09-12');assert.equal(r.body.rows[0].e,'Vencido 1 a 2 meses');
+ assert.equal(r.body.rows[0].f,'2026-10-08');assert.equal(r.body.rows[0].e,'Vencido 1 a 2 meses');
  for(const source of ['CLI','PRV']){
   const out=normalizeReport(source,[fixture({FECHA:'01-10-2026',FECHAVTO:'31-10-2026',CUENTA:'PROVEEDORES',VENCIMIENTO:'A vencer 0 a 1 mes'})],'2026-10-15');
   assert.equal(out.rows[0].f,'2026-10-31');assert.equal(out.rows[0].fc,'2026-10-01');
