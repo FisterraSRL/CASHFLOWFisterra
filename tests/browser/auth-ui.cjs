@@ -7,11 +7,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   let revision=0,payload=null;
   const server=http.createServer(async(req,res)=>{
     const json=(status,body,cookie)=>{res.writeHead(status,{'content-type':'application/json',...(cookie?{'set-cookie':cookie}:{})});res.end(JSON.stringify(body))};
-    const logged=req.headers.cookie?.includes('cashflow_session=test-session');
+    const logged=req.headers.cookie?.includes('cashflow_session=test-session'),noCompany=req.headers.cookie?.includes('cashflow_no_company=1');
     if(req.url==='/api/auth'){
-      if(req.method==='GET')return json(200,logged?{mode:'users',authenticated:true,user,company,companies:[company]}:{mode:'users',authenticated:false,recoveryAvailable:false});
+      if(req.method==='GET')return json(200,logged?{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company]}:{mode:'users',authenticated:false,recoveryAvailable:false});
       let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
-      if(body.action==='login')return body.email===user.email&&body.password==='correct long password'?json(200,{mode:'users',authenticated:true,user,company,companies:[company]},'cashflow_session=test-session; HttpOnly; Path=/'):json(401,{error:'Email o contraseña incorrectos.'});
+      if(body.action==='login')return body.email===user.email&&body.password==='correct long password'?json(200,{mode:'users',authenticated:true,user,company:noCompany?null:company,companies:noCompany?[]:[company]},'cashflow_session=test-session; HttpOnly; Path=/'):json(401,{error:'Email o contraseña incorrectos.'});
       if(body.action==='logout')return json(200,{authenticated:false},'cashflow_session=; Max-Age=0; Path=/');
       return json(400,{error:'Acción desconocida.'});
     }
@@ -42,6 +42,19 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     assert.equal(await page.locator('#authUsersTab').getAttribute('aria-selected'),'true');
     assert.equal(await page.locator('#v-res').isVisible(),false);
     assert.match(await page.locator('#v-usr').innerText(),/admin@example.com/);
+    const onboarding=await browser.newContext({viewport:{width:1280,height:850}});
+    await onboarding.addCookies([{name:'cashflow_no_company',value:'1',url:`http://127.0.0.1:${server.address().port}`}]);
+    const adminPage=await onboarding.newPage();await adminPage.goto(`http://127.0.0.1:${server.address().port}`);
+    await adminPage.locator('#authEmail').fill(user.email);await adminPage.locator('#authPassword').fill('correct long password');await adminPage.getByRole('button',{name:'Iniciar sesión'}).click();
+    await adminPage.getByText('Usuarios y empresas').waitFor();
+    assert.equal(await adminPage.locator('#authCompanySelect').isVisible(),false);
+    assert.equal(await adminPage.getByRole('button',{name:'Cerrar sesión'}).isVisible(),true);
+    assert.ok(await adminPage.locator('.workspace-gate-card').evaluate(el=>el.getBoundingClientRect().width)>900);
+    if(process.env.AUTH_SCREENSHOT)await adminPage.screenshot({path:process.env.AUTH_SCREENSHOT,fullPage:true});
+    await adminPage.setViewportSize({width:390,height:844});
+    assert.equal(await adminPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    assert.equal(await adminPage.getByRole('button',{name:'Editar'}).isVisible(),true);
+    await onboarding.close();
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({loginGate:true,passwordVisibility:true,invalidLoginMessage:true,companyWorkspaceStartsEmpty:true,adminView:true,noPageErrors:true}));
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}

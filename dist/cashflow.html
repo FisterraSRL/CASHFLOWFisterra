@@ -121,6 +121,14 @@ section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radiu
 #workspaceGate{min-height:100vh;display:grid;place-items:center;padding:24px}
 .workspace-ready #workspaceGate{display:none}
 .workspace-gate-card{width:min(480px,100%);background:var(--panel);border:var(--fs-hairline);border-radius:var(--r);box-shadow:var(--fs-shadow-panel);padding:28px}
+.workspace-admin-gate #workspaceGate{display:block;max-width:1280px;margin:auto;padding:28px 24px 56px}
+.workspace-admin-gate .workspace-gate-card{width:100%;padding:32px}
+.workspace-admin-gate #workspaceGateText{margin:0 0 20px}
+.workspace-admin-gate #authCompanyPicker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;margin-bottom:22px;background:var(--panel2);border:1px solid var(--line);border-radius:12px}
+.workspace-admin-gate #authCompanyPicker label{font-weight:700}
+.workspace-admin-gate #authCompanyPicker select{min-width:260px;max-width:100%;min-height:40px;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff}
+.workspace-admin-gate #authCompanyPicker .workspace-gate-actions{margin:0}
+.workspace-admin-gate #authCompanyPicker.no-company{justify-content:flex-end;padding:0;margin:-54px 0 26px;background:transparent;border:0}
 .workspace-gate-card h1{font-size:25px;color:var(--fs-red);margin:0 0 8px}
 .workspace-gate-card p{color:var(--ink2)}
 .workspace-gate-card input{width:100%;min-height:42px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
@@ -132,11 +140,23 @@ section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radiu
 .auth-message{margin-top:14px;color:var(--crit)}
 .auth-userbar{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .auth-userbar select{min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--brand)}
-.auth-admin-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;margin-top:16px}
+.auth-admin-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,1fr);align-items:start;gap:16px;margin-top:16px}
+.auth-admin-grid>.card{min-width:0}
+.auth-admin-grid .tblwrap{max-width:100%;overflow-x:auto}
+.auth-admin-grid table{min-width:580px}
+.auth-user-rows{display:grid;gap:8px;margin-top:12px}
+.auth-user-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px}
+.auth-user-row-main{flex:1 1 210px;min-width:0}.auth-user-row-main strong,.auth-user-row-main small{display:block;overflow-wrap:anywhere}
+.auth-user-row-main small{color:var(--ink2);margin-top:3px}.auth-user-row-meta{flex:1 1 170px;color:var(--ink2);font-size:12px}
 .auth-admin-grid input,.auth-admin-grid select{width:100%;min-height:38px;border:1px solid var(--line);border-radius:8px;padding:7px 10px}
-.auth-admin-grid label{display:block;margin:10px 0 4px;font-weight:700}.auth-company-list{display:grid;gap:6px;margin:8px 0}
+.auth-admin-grid label{display:block;margin:10px 0 4px;font-weight:700}.auth-company-list{display:grid;gap:6px;margin:8px 0;max-height:240px;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
 .auth-company-list label{font-weight:400;margin:0}.auth-company-list input{width:auto;min-height:0}
-@media(max-width:760px){.auth-admin-grid{grid-template-columns:1fr}}
+.auth-admin-grid .auth-status-toggle{display:flex;align-items:center;gap:8px;margin:14px 0}
+.auth-admin-grid .auth-status-toggle input{width:auto;min-height:0}
+.auth-company-details{margin:14px 0}.auth-company-details summary{cursor:pointer;font-weight:700;color:var(--brand)}
+.auth-company-details p{max-height:160px;overflow:auto;line-height:1.8}
+@media(max-width:980px){.auth-admin-grid{grid-template-columns:1fr}}
+@media(max-width:640px){.workspace-admin-gate #workspaceGate{padding:12px}.workspace-admin-gate .workspace-gate-card{padding:20px}.workspace-admin-gate #authCompanyPicker select{min-width:0;width:100%}.workspace-admin-gate #authCompanyPicker.no-company{margin:0 0 18px}}
 .chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
 .chip.ej{background:var(--warn);color:#2a1d00;border-color:transparent}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
@@ -330,7 +350,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="auth-field"><label for="authConfirmPassword">Confirmar contraseña</label><input id="authConfirmPassword" type="password" autocomplete="new-password" minlength="12" required></div>
       <div class="workspace-gate-actions"><button class="btn pri" type="submit">Restablecer contraseña</button><button class="btn" data-auth-back type="button">Volver</button></div>
     </form>
-    <div id="authCompanyGate" hidden><label for="authCompanySelect">Empresa</label><select id="authCompanySelect"></select><div class="workspace-gate-actions"><button class="btn pri" id="authChooseCompany" type="button">Entrar</button><button class="btn" id="authCompanyLogout" type="button">Cerrar sesión</button></div><div id="authAdminGate"></div></div>
+    <div id="authCompanyGate" hidden><div id="authCompanyPicker"><label for="authCompanySelect">Empresa</label><select id="authCompanySelect"></select><div class="workspace-gate-actions"><button class="btn pri" id="authChooseCompany" type="button">Entrar</button><button class="btn" id="authCompanyLogout" type="button">Cerrar sesión</button></div></div><div id="authAdminGate"></div></div>
     <div id="authGateMessage" class="auth-message" role="status" hidden></div>
     <div id="workspaceFirstUse" hidden>
       <p>Esta instalación todavía no tiene datos compartidos. Elegí cómo iniciarla:</p>
@@ -485,11 +505,11 @@ function showWorkspaceGate(message,view){
   if(view==='key')$('#workspaceKeyInput').focus();
 }
 function showAuthGate(view,message=''){
-  document.body.className='workspace-locked';$('#workspaceGateText').textContent=view==='login'?'Ingresá con tu usuario y contraseña.':view==='company'?'Elegí la empresa con la que vas a trabajar.':view==='reset'?'Ingresá una contraseña nueva.':'Ingresá tu email para solicitar un enlace.';
+  const adminCompany=view==='company'&&AUTH.user?.role==='admin';document.body.className=adminCompany?'workspace-locked workspace-admin-gate':'workspace-locked';$('#workspaceGateText').textContent=view==='login'?'Ingresá con tu usuario y contraseña.':view==='company'?adminCompany?'Administrá los usuarios y sus empresas. Para abrir el cashflow, elegí una empresa asignada.':'Elegí la empresa con la que vas a trabajar.':view==='reset'?'Ingresá una contraseña nueva.':'Ingresá tu email para solicitar un enlace.';
   for(const id of ['workspaceGateForm','workspaceFirstUse','workspaceRetry','authLoginForm','authRecoveryForm','authResetForm','authCompanyGate'])$('#'+id).hidden=true;
   $('#'+({login:'authLoginForm',recovery:'authRecoveryForm',reset:'authResetForm',company:'authCompanyGate'}[view])).hidden=false;
   const status=$('#authGateMessage');status.hidden=!message;status.textContent=message;
-  if(view==='company'){$('#authCompanySelect').innerHTML=AUTH.companies.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.code)})</option>`).join('');$('#authChooseCompany').disabled=!AUTH.companies.length;if(AUTH.user?.role==='admin')renderUsers($('#authAdminGate'))}
+  if(view==='company'){$('#authCompanySelect').innerHTML=AUTH.companies.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.code)})</option>`).join('');$('#authChooseCompany').disabled=!AUTH.companies.length;const noCompany=adminCompany&&!AUTH.companies.length;$('#authCompanyPicker').classList.toggle('no-company',noCompany);$('#authCompanyPicker label').hidden=noCompany;$('#authCompanySelect').hidden=noCompany;$('#authChooseCompany').hidden=noCompany;if(adminCompany)renderUsers($('#authAdminGate'))}
   if(view==='login')$('#authEmail').focus();
 }
 async function authRequest(body){
@@ -1542,20 +1562,20 @@ async function renderUsers(host=$('#v-usr')){
   host.innerHTML='<p class="note">Cargando usuarios y empresas…</p>';
   let users,companies,migration;try{[{users},{companies},migration]=await Promise.all([adminApi('/api/users'),adminApi('/api/companies'),adminApi('/api/migrate').catch(()=>({available:false}))])}catch(error){host.innerHTML=`<p class="note" role="alert">${esc(error.message)}</p>`;return}
   host.innerHTML=`<h2>Usuarios y empresas</h2><p class="note">Solo un administrador puede crear usuarios, cambiar roles y asignar empresas.</p>
-  <div class="auth-admin-grid"><div class="card"><h3>Usuarios</h3><input id="authUserSearch" type="search" placeholder="Buscar por nombre o email" aria-label="Buscar usuarios"><div id="authUserList" class="tblwrap"></div></div>
+  <div class="auth-admin-grid"><div class="card"><h3>Usuarios</h3><input id="authUserSearch" type="search" placeholder="Buscar por nombre o email" aria-label="Buscar usuarios"><div id="authUserList" class="auth-user-rows"></div></div>
   <div class="card"><h3 id="authUserFormTitle">Crear usuario</h3><form id="authUserForm"><input type="hidden" id="authEditId">
   <label for="authEditName">Nombre y apellido</label><input id="authEditName" required maxlength="120">
   <label for="authEditEmail">Email</label><input id="authEditEmail" type="email" required maxlength="254">
   <label for="authEditPassword">Contraseña inicial o nueva</label><input id="authEditPassword" type="password" minlength="12" autocomplete="new-password" placeholder="Mínimo 12 caracteres">
   <label for="authEditRole">Rol</label><select id="authEditRole"><option value="user">Usuario estándar</option><option value="admin">Administrador</option></select>
-  <label><input id="authEditActive" type="checkbox" checked> Activo</label><strong>Empresas habilitadas</strong>
+  <label class="auth-status-toggle"><input id="authEditActive" type="checkbox" checked> Activo</label><strong>Empresas habilitadas</strong>
   <div class="auth-company-list">${companies.filter(c=>c.active).map(c=>`<label><input type="checkbox" data-auth-company="${esc(c.id)}"> ${esc(c.name)} (${esc(c.code)})</label>`).join('')||'<p class="note">Todavía no hay empresas cargadas.</p>'}</div>
   <div class="workspace-gate-actions"><button class="btn pri" type="submit">Guardar usuario</button><button class="btn" id="authNewUser" type="button">Nuevo</button></div><p class="msg" id="authUserMessage" role="status"></p></form></div></div>
-  <div class="card" style="margin-top:16px"><h3>Empresas disponibles</h3><p class="note">Se muestran solo las empresas con activo = true. El nombre debe coincidir con el campo EMPRESA que devuelven los reportes de Finnegans.</p><p>${companies.filter(c=>c.active).map(c=>`${esc(c.name)} (${esc(c.code)})`).join(' · ')||'Sin empresas activas'}</p>
+  <div class="card" style="margin-top:16px"><h3>Empresas disponibles</h3><p class="note">Se muestran solo las empresas con activo = true. El nombre debe coincidir con el campo EMPRESA que devuelven los reportes de Finnegans.</p><details class="auth-company-details"><summary>Ver ${companies.filter(c=>c.active).length} empresas activas</summary><p>${companies.filter(c=>c.active).map(c=>`${esc(c.name)} (${esc(c.code)})`).join(' · ')||'Sin empresas activas'}</p></details>
   <button class="btn" id="authSyncCompanies" type="button">Actualizar empresas activas desde Finnegans</button><form id="authCompanyForm" class="workspace-gate-actions"><input id="authCompanyCode" placeholder="Código Finnegans" required maxlength="64"><input id="authCompanyName" placeholder="Nombre de empresa" required maxlength="120"><button class="btn" type="submit">Agregar empresa</button></form><p class="msg" id="authCompanyMessage" role="status"></p></div>
   ${migration.available?`<div class="card" style="margin-top:16px"><h3>Migrar datos anteriores</h3><p class="note">La base anterior se conserva. Se copiarán solo los movimientos con el nombre exacto de la empresa elegida. ${migration.preview.unassigned} registros sin empresa requieren revisión y no se migran.</p><p class="note">${migration.preview.companies.map(c=>`${esc(c.name)}: ${c.count} movimientos`).join(' · ')}</p><div class="workspace-gate-actions"><select id="authMigrationCompany" aria-label="Empresa para migrar">${companies.filter(c=>c.active).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select><button class="btn" id="authMigrate" type="button">Migrar empresa</button></div><p class="msg" id="authMigrationMessage" role="status"></p></div>`:''}`;
   const list=host.querySelector('#authUserList'),search=host.querySelector('#authUserSearch');
-  const showList=()=>{const q=search.value.trim().toLowerCase(),shown=users.filter(u=>!q||(u.name+' '+u.email).toLowerCase().includes(q));list.innerHTML=`<table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Empresas</th><th></th></tr></thead><tbody>${shown.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role==='admin'?'Administrador':'Usuario'}</td><td>${u.active?'Activo':'Inactivo'}</td><td>${(u.company_ids||[]).length}</td><td><button class="btn" type="button" data-auth-edit="${esc(u.id)}">Editar</button></td></tr>`).join('')}</tbody></table>`;
+  const showList=()=>{const q=search.value.trim().toLowerCase(),shown=users.filter(u=>!q||(u.name+' '+u.email).toLowerCase().includes(q));list.innerHTML=shown.map(u=>`<div class="auth-user-row"><div class="auth-user-row-main"><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></div><div class="auth-user-row-meta">${u.role==='admin'?'Administrador':'Usuario estándar'} · ${u.active?'Activo':'Inactivo'}<br>${(u.company_ids||[]).length} empresa${(u.company_ids||[]).length===1?'':'s'}</div><button class="btn" type="button" data-auth-edit="${esc(u.id)}">Editar</button></div>`).join('')||'<p class="note">No hay usuarios con ese nombre o email.</p>';
     list.querySelectorAll('[data-auth-edit]').forEach(button=>button.onclick=()=>{const u=users.find(x=>x.id===button.dataset.authEdit);host.querySelector('#authEditId').value=u.id;host.querySelector('#authEditName').value=u.name;host.querySelector('#authEditEmail').value=u.email;host.querySelector('#authEditPassword').value='';host.querySelector('#authEditRole').value=u.role;host.querySelector('#authEditActive').checked=u.active;host.querySelectorAll('[data-auth-company]').forEach(input=>input.checked=(u.company_ids||[]).includes(input.dataset.authCompany));host.querySelector('#authUserFormTitle').textContent='Editar usuario';host.querySelector('#authUserForm').scrollIntoView({behavior:'smooth',block:'nearest'})})};
   showList();search.oninput=showList;
   host.querySelector('#authNewUser').onclick=()=>{host.querySelector('#authUserForm').reset();host.querySelector('#authEditId').value='';host.querySelector('#authUserFormTitle').textContent='Crear usuario'};
