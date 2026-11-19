@@ -1,6 +1,10 @@
 'use strict';
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 const {authorize}=require('../lib/workspace-auth.cjs');
+const {REPORTS}=require('../lib/finnegans-reports.cjs');
+const {usersEnabled}=require('../lib/auth-session.cjs');
+const {legacyCredentials}=require('../lib/legacy-credentials.cjs');
+const {readCompanyWorkspace}=require('../lib/company-workspace.cjs');
 module.exports=async function(req,res){
   res.setHeader('Cache-Control','no-store, private');res.setHeader('Vercel-CDN-Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -8,6 +12,17 @@ module.exports=async function(req,res){
   if(!await authorize(req,res))return;
   if(req.method==='GET'){
     const config=sharedConfig();
+    if(usersEnabled()){
+      if(!config.enabled)try{await legacyCredentials();config.enabled=true}catch{}
+      if(config.enabled){
+        const workspace=await readCompanyWorkspace(req.cashflowAuth.company.id);
+        for(const [source,report] of Object.entries(REPORTS)){
+          const saved=workspace.payload?.filters?.[source]||{};
+          const filters=Object.fromEntries(report.fields.filter(key=>typeof saved[key]==='string').map(key=>[key,saved[key]]));
+          config.sources[source]={filters:{...filters,...(config.sources[source]?.filters||{})}};
+        }
+      }
+    }
     return res.status(200).json(config);
   }
   if(req.method==='POST'){

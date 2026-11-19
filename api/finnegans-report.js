@@ -4,6 +4,7 @@ const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 const {authorize}=require('../lib/workspace-auth.cjs');
 const {usersEnabled}=require('../lib/auth-session.cjs');
+const {readCompanyWorkspace}=require('../lib/company-workspace.cjs');
 const companyName=value=>String(value||'').trim().replace(/\s+/g,' ').toLocaleUpperCase('es-AR');
 
 module.exports=async function handler(req,res){
@@ -18,6 +19,13 @@ module.exports=async function handler(req,res){
   let body=req.body;
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>24000)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
   const shared=usersEnabled()||body?.shared===true,config=shared?sharedConfig():null;
+  if(usersEnabled()&&Object.hasOwn(REPORTS,body?.source)){
+    try{
+      const workspace=await readCompanyWorkspace(req.cashflowAuth.company.id),saved=workspace.payload?.filters?.[body.source]||{};
+      const filters=Object.fromEntries(REPORTS[body.source].fields.filter(key=>typeof saved[key]==='string').map(key=>[key,saved[key]]));
+      config.sources[body.source]={filters:{...filters,...(config.sources[body.source]?.filters||{})}};
+    }catch{return res.status(503).json({error:'No se pudieron leer los filtros guardados de esta empresa.'})}
+  }
   if(shared&&(!Object.hasOwn(REPORTS,body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros en Vercel.'});
   // Company is intentionally omitted from every Finnegans request. In users
   // mode the server filters the complete response before returning any rows.
