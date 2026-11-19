@@ -1,6 +1,8 @@
 'use strict';
 const {authorize,protectedDeployment}=require('../lib/workspace-auth.cjs');
 const {readWorkspace,writeWorkspace}=require('../lib/workspace-store.cjs');
+const {usersEnabled}=require('../lib/auth-session.cjs');
+const {readCompanyWorkspace,writeCompanyWorkspace}=require('../lib/company-workspace.cjs');
 
 const SOURCES=new Set(['BCO','CLI','PRV','CHP','CHT','PRE','LEA','ARCA','PPTO','EJC','EJP']);
 const MAX_BYTES=3*1024*1024;
@@ -30,6 +32,17 @@ function validPayload(payload){
   }
   return true;
 }
+function validCompanyPayload(payload,company){
+  if(payload.vault!==undefined)return false;
+  const names=new Set([company.name,company.code]);
+  for(const source of Object.values(payload.state.data)){
+    for(const row of source.rows)if(row.company&&(!names.has(row.company)))return false;
+    for(const row of source.applications||[])if(row.company&&(!names.has(row.company)))return false;
+  }
+  for(const filters of Object.values(payload.filters))if(filters.empresa&&filters.empresa!==company.code)return false;
+  for(const change of Object.values(payload.state.dateChanges||{}))if(change.company&&!names.has(change.company))return false;
+  return true;
+}
 
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');
@@ -39,10 +52,10 @@ module.exports=async function handler(req,res){
     res.setHeader('Allow','GET, PUT');return res.status(405).json({error:'Método no permitido.'});
   }
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)throw new Error()}catch{return res.status(403).json({error:'La solicitud debe realizarse desde esta aplicación.'})}}
-  if(!protectedDeployment())return req.method==='GET'?res.status(200).json({mode:'local'}):res.status(503).json({error:'El almacenamiento compartido no está configurado.'});
-  if(!authorize(req,res))return;
+  if(!usersEnabled()&&!protectedDeployment())return req.method==='GET'?res.status(200).json({mode:'local'}):res.status(503).json({error:'El almacenamiento compartido no está configurado.'});
+  if(!await authorize(req,res))return;
   if(req.method==='GET'){
-    try{return res.status(200).json(await readWorkspace())}
+    try{return res.status(200).json(await(usersEnabled()?readCompanyWorkspace(req.cashflowAuth.company.id):readWorkspace()))}
     catch{return res.status(503).json({error:'No se pudo leer el almacenamiento compartido.'})}
   }
   if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato de la solicitud debe ser JSON.'});
@@ -52,9 +65,9 @@ module.exports=async function handler(req,res){
   let encoded;
   try{encoded=JSON.stringify(body)}catch{return res.status(400).json({error:'Los datos no son válidos.'})}
   if(!encoded||Buffer.byteLength(encoded)>MAX_BYTES)return res.status(413).json({error:'Los datos exceden el límite de almacenamiento por operación.'});
-  if(!Number.isSafeInteger(body?.revision)||body.revision<0||!validPayload(body.payload))return res.status(400).json({error:'El estado enviado no es válido.'});
+  if(!Number.isSafeInteger(body?.revision)||body.revision<0||!validPayload(body.payload)||usersEnabled()&&!validCompanyPayload(body.payload,req.cashflowAuth.company))return res.status(400).json({error:'El estado enviado no es válido.'});
   try{
-    const result=await writeWorkspace(body.revision,body.payload);
+    const result=await(usersEnabled()?writeCompanyWorkspace(req.cashflowAuth.company.id,body.revision,body.payload):writeWorkspace(body.revision,body.payload));
     if(!result)return res.status(409).json({error:'Los datos cambiaron en otra sesión. Recargá antes de guardar para evitar sobrescribirlos.'});
     return res.status(200).json(result);
   }catch{return res.status(503).json({error:'No se pudieron guardar los datos compartidos. Los cambios siguen en este navegador.'})}

@@ -3,6 +3,8 @@ const {REPORTS,reportUrl,normalizeReport}=require('../lib/finnegans-reports.cjs'
 const {reportDiagnostics}=require('../lib/finnegans-diagnostics.cjs');
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 const {authorize}=require('../lib/workspace-auth.cjs');
+const {usersEnabled}=require('../lib/auth-session.cjs');
+const companyName=value=>String(value||'').trim().replace(/\s+/g,' ').toLocaleUpperCase('es-AR');
 
 module.exports=async function handler(req,res){
   res.setHeader('Cache-Control','no-store, private');
@@ -10,15 +12,15 @@ module.exports=async function handler(req,res){
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Usá POST para consultar el reporte.'})}
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)throw new Error()}catch{return res.status(403).json({error:'La solicitud debe realizarse desde esta aplicación.'})}}
-  if(!authorize(req,res))return;
+  if(!await authorize(req,res))return;
   if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato de la solicitud debe ser JSON.'});
   if(Number(req.headers['content-length'])>24000)return res.status(413).json({error:'La solicitud es demasiado grande.'});
   let body=req.body;
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>24000)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
-  const shared=body?.shared===true,config=shared?sharedConfig():null;
+  const shared=usersEnabled()||body?.shared===true,config=shared?sharedConfig():null;
   if(shared&&(!Object.hasOwn(REPORTS,body.source)||!config.sources[body.source]))return res.status(503).json({error:'Esta fuente compartida requiere configurar sus filtros en Vercel.'});
   // Shared callers can never widen the configured company/account scope.
-  if(shared)body.filters={...config.sources[body.source].filters,fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
+  if(shared)body.filters={...config.sources[body.source].filters,...(usersEnabled()?{empresa:req.cashflowAuth.company.code}:{}),fecha:body.source==='BCO'?body.fecha:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date())};
   let token=body?.access_token;
   if(shared){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
   if(typeof token!=='string'||!token||token.length>16384||!/^[A-Za-z0-9._~+\/-]+=*$/.test(token))return res.status(400).json({error:'Obtené un token válido antes de consultar el reporte.'});
@@ -41,6 +43,10 @@ module.exports=async function handler(req,res){
     try{payload=JSON.parse(text)}catch{return fail(502,'Finnegans no devolvió un reporte JSON válido. Se conservaron los datos anteriores.')}
     let normalized;
     try{normalized=normalizeReport(body.source,payload,body.filters.fecha,body.filters)}catch(error){return fail(422,error.message)}
+    if(usersEnabled()){
+      const allowed=new Set([companyName(req.cashflowAuth.company.name),companyName(req.cashflowAuth.company.code)]);
+      if([...normalized.rows,...(normalized.applications||[])].some(row=>!allowed.has(companyName(row.company))))return fail(422,'El reporte contiene movimientos sin empresa identificable o de otra empresa. No se modificaron los datos anteriores.');
+    }
     if(Buffer.byteLength(JSON.stringify({...normalized,diagnostics}))>4*1024*1024)return fail(413,'El reporte es demasiado grande. Acotá los filtros.');
     return res.status(200).json({...normalized,source:body.source,date:body.filters.fecha,diagnostics});
   }catch(error){

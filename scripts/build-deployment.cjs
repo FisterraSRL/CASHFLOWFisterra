@@ -19,7 +19,7 @@ for(const name of ['Montserrat-Variable-400-700.woff2','Montserrat-Variable-Ital
 replaceOnce('<!--FISTERRA_LOGO-->',read('app/brand/logo/fisterra-lockup-horizontal.svg').toString('utf8'));
 
 // Every named customer starts without Fisterra's demonstration movements.
-const data=installation?{ref:'2000-01-01',tc:0,mov:[],cartera:[]}:JSON.parse(read('data/sample/data.json').toString('utf8'));
+const data=installation||process.env.CASHFLOW_AUTH_MODE==='users'?{ref:'2000-01-01',tc:0,mov:[],cartera:[]}:JSON.parse(read('data/sample/data.json').toString('utf8'));
 if(installation){
   replaceOnce('<title>Fisterra · Cashflow</title>',`<title>${installation} · Cashflow</title>`);
   replaceOnce('<span class="company">FISTERRA</span>',`<span class="company">${installation.toLocaleUpperCase('es-AR')}</span>`);

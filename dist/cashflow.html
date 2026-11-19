@@ -126,6 +126,17 @@ section.view{padding:22px;border:var(--fs-hairline);border-radius:var(--fs-radiu
 .workspace-gate-card input{width:100%;min-height:42px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
 .workspace-gate-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .workspace-gate-card [hidden]{display:none}
+.auth-field{margin-top:12px}.auth-field label{display:block;margin-bottom:5px;font-weight:700;color:var(--brand)}
+.auth-password{display:flex;gap:8px}.auth-password input{flex:1;min-width:0}
+.auth-links{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.auth-message{margin-top:14px;color:var(--crit)}
+.auth-userbar{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.auth-userbar select{min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--brand)}
+.auth-admin-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:16px;margin-top:16px}
+.auth-admin-grid input,.auth-admin-grid select{width:100%;min-height:38px;border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.auth-admin-grid label{display:block;margin:10px 0 4px;font-weight:700}.auth-company-list{display:grid;gap:6px;margin:8px 0}
+.auth-company-list label{font-weight:400;margin:0}.auth-company-list input{width:auto;min-height:0}
+@media(max-width:760px){.auth-admin-grid{grid-template-columns:1fr}}
 .chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel2);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
 .chip.ej{background:var(--warn);color:#2a1d00;border-color:transparent}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
@@ -304,6 +315,23 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <input id="workspaceKeyInput" type="password" autocomplete="off" required>
       <div class="workspace-gate-actions"><button class="btn pri" type="submit">Abrir cashflow</button></div>
     </form>
+    <form id="authLoginForm" hidden>
+      <div class="auth-field"><label for="authEmail">Email</label><input id="authEmail" type="email" autocomplete="username" required></div>
+      <div class="auth-field"><label for="authPassword">Contraseña</label><div class="auth-password"><input id="authPassword" type="password" autocomplete="current-password" required><button class="btn" id="authShowPassword" type="button" aria-label="Mostrar contraseña">Mostrar</button></div></div>
+      <div class="workspace-gate-actions"><button class="btn pri" type="submit">Iniciar sesión</button></div>
+      <div class="auth-links"><button class="lnk" id="authForgot" type="button">¿Olvidaste tu contraseña?</button></div>
+    </form>
+    <form id="authRecoveryForm" hidden>
+      <div class="auth-field"><label for="authRecoveryEmail">Email</label><input id="authRecoveryEmail" type="email" autocomplete="email" required></div>
+      <div class="workspace-gate-actions"><button class="btn pri" type="submit">Solicitar enlace</button><button class="btn" data-auth-back type="button">Volver</button></div>
+    </form>
+    <form id="authResetForm" hidden>
+      <div class="auth-field"><label for="authNewPassword">Nueva contraseña</label><div class="auth-password"><input id="authNewPassword" type="password" autocomplete="new-password" minlength="12" required><button class="btn" id="authShowNewPassword" type="button" aria-label="Mostrar contraseña">Mostrar</button></div></div>
+      <div class="auth-field"><label for="authConfirmPassword">Confirmar contraseña</label><input id="authConfirmPassword" type="password" autocomplete="new-password" minlength="12" required></div>
+      <div class="workspace-gate-actions"><button class="btn pri" type="submit">Restablecer contraseña</button><button class="btn" data-auth-back type="button">Volver</button></div>
+    </form>
+    <div id="authCompanyGate" hidden><label for="authCompanySelect">Empresa</label><select id="authCompanySelect"></select><div class="workspace-gate-actions"><button class="btn pri" id="authChooseCompany" type="button">Entrar</button><button class="btn" id="authCompanyLogout" type="button">Cerrar sesión</button></div><div id="authAdminGate"></div></div>
+    <div id="authGateMessage" class="auth-message" role="status" hidden></div>
     <div id="workspaceFirstUse" hidden>
       <p>Esta instalación todavía no tiene datos compartidos. Elegí cómo iniciarla:</p>
       <div class="workspace-gate-actions"><button class="btn pri" id="workspaceImport" type="button">Importar datos de este navegador</button><button class="btn" id="workspaceEmpty" type="button">Comenzar sin datos</button></div>
@@ -328,6 +356,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         font-size="68" font-weight="400" letter-spacing="1" fill="#0A2F43">FISTERRA</text>
 </svg>
 </div>
+    <div class="auth-userbar" id="authUserbar" hidden></div>
   </div>
   <div class="brand">
     <h1>CASHFLOW<span>de fondos proyectados</span></h1>
@@ -360,6 +389,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <button role="tab" data-t="eje">Ejecutado</button>
   <button role="tab" data-t="ppt">Presupuesto vs real</button>
   <button role="tab" data-t="dat">Datos y fuentes</button>
+  <button role="tab" data-t="usr" id="authUsersTab" hidden>Usuarios</button>
 </nav>
 
 <section class="view" id="v-res"></section>
@@ -368,6 +398,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <section class="view" id="v-eje" hidden></section>
 <section class="view" id="v-ppt" hidden></section>
 <section class="view" id="v-dat" hidden></section>
+<section class="view" id="v-usr" hidden></section>
 </main>
 <div id="drawerHost"></div>
 
@@ -415,6 +446,7 @@ if(S.data.EJE){
 }
 for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
 const WORKSPACE={mode:'checking',key:'',revision:0,updatedAt:null,timer:null,busy:false,dirty:false,started:false,hydrating:false,vault:null};
+const AUTH={mode:'checking',user:null,company:null,companies:[],recoveryAvailable:false};
 try{WORKSPACE.key=sessionStorage.getItem('cf-access-key-v1')||''}catch{}
 function storageError(message){const msg=document.querySelector('#storageMessage');if(msg){msg.hidden=false;msg.textContent=message}}
 function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage.setItem(LS,JSON.stringify({v:1,S}))}catch{localSaved=false;storageError('No se pudieron guardar los datos en este navegador. Revisá el espacio y los permisos de almacenamiento del sitio.')}
@@ -425,7 +457,7 @@ function workspacePayload(){
   const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','ovr','inc','data','dateChanges'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
-  return {version:1,state,filters,...(WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
+  return {version:1,state,filters,...(AUTH.mode!=='users'&&WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
 }
 function scheduleWorkspaceSave(){
   WORKSPACE.dirty=true;clearTimeout(WORKSPACE.timer);
@@ -449,14 +481,47 @@ async function flushWorkspaceSave(){
 function showWorkspaceGate(message,view){
   document.body.className='workspace-locked';$('#workspaceGateText').textContent=message;
   $('#workspaceGateForm').hidden=view!=='key';$('#workspaceFirstUse').hidden=view!=='first';$('#workspaceRetry').hidden=view!=='retry';
+  for(const id of ['authLoginForm','authRecoveryForm','authResetForm','authCompanyGate'])$('#'+id).hidden=true;
   if(view==='key')$('#workspaceKeyInput').focus();
+}
+function showAuthGate(view,message=''){
+  document.body.className='workspace-locked';$('#workspaceGateText').textContent=view==='login'?'Ingresá con tu usuario y contraseña.':view==='company'?'Elegí la empresa con la que vas a trabajar.':view==='reset'?'Ingresá una contraseña nueva.':'Ingresá tu email para solicitar un enlace.';
+  for(const id of ['workspaceGateForm','workspaceFirstUse','workspaceRetry','authLoginForm','authRecoveryForm','authResetForm','authCompanyGate'])$('#'+id).hidden=true;
+  $('#'+({login:'authLoginForm',recovery:'authRecoveryForm',reset:'authResetForm',company:'authCompanyGate'}[view])).hidden=false;
+  const status=$('#authGateMessage');status.hidden=!message;status.textContent=message;
+  if(view==='company'){$('#authCompanySelect').innerHTML=AUTH.companies.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.code)})</option>`).join('');$('#authChooseCompany').disabled=!AUTH.companies.length;if(AUTH.user?.role==='admin')renderUsers($('#authAdminGate'))}
+  if(view==='login')$('#authEmail').focus();
+}
+async function authRequest(body){
+  const response=await fetch('/api/auth',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store'});
+  const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');return data;
+}
+async function loadAuth(){
+  if(location.protocol==='file:'){AUTH.mode='legacy';return loadWorkspace()}
+  try{
+    const response=await fetch('/api/auth',{cache:'no-store'});
+    if(!response.headers.get('content-type')?.includes('application/json')){AUTH.mode='legacy';return loadWorkspace()}
+    const data=await response.json();if(data.mode!=='users'){AUTH.mode='legacy';return loadWorkspace()}
+    AUTH.mode='users';AUTH.user=data.user||null;AUTH.company=data.company||null;AUTH.companies=data.companies||[];AUTH.recoveryAvailable=!!data.recoveryAvailable;
+    if(!data.authenticated)return showAuthGate(new URLSearchParams(location.search).has('reset')?'reset':'login');
+    if(!AUTH.company)return showAuthGate('company',AUTH.companies.length?'':'No tenés empresas habilitadas. Pedile a un administrador que te asigne una.');
+    return loadWorkspace();
+  }catch(error){showAuthGate('login',error.message||'No se pudo verificar el acceso.')}
+}
+function renderAuthUserbar(){
+  const bar=$('#authUserbar'),tab=$('#authUsersTab');tab.hidden=AUTH.mode!=='users'||AUTH.user?.role!=='admin';
+  bar.hidden=AUTH.mode!=='users';if(bar.hidden)return;
+  bar.innerHTML=`<span>${esc(AUTH.user?.name||AUTH.user?.email)}</span>${AUTH.companies.length>1?`<select id="authSwitchCompany" aria-label="Empresa actual">${AUTH.companies.map(c=>`<option value="${esc(c.id)}"${c.id===AUTH.company?.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`:`<span class="company">${esc(AUTH.company?.name||'Sin empresa')}</span>`}<button class="btn" id="authLogout" type="button">Salir</button>`;
+  if($('#authSwitchCompany'))$('#authSwitchCompany').onchange=async e=>{try{await authRequest({action:'select-company',companyId:e.target.value});location.reload()}catch(error){storageError(error.message)}};
+  $('#authLogout').onclick=async()=>{try{await authRequest({action:'logout'})}finally{location.reload()}};
 }
 function finishWorkspace(){
   document.body.className='workspace-ready';
   if(WORKSPACE.started){renderAll();return}
   WORKSPACE.started=true;
   if(WORKSPACE.mode==='ready')try{localStorage.removeItem(LS);localStorage.removeItem(REPORT_FILTER_KEY)}catch{}
-  credentialsReady=restoreCredentials().then(syncWorkspaceCredentials).finally(()=>{if(S.tab==='dat')renderDat()});
+  credentialsReady=AUTH.mode==='users'?Promise.resolve():restoreCredentials().then(syncWorkspaceCredentials).finally(()=>{if(S.tab==='dat')renderDat()});
+  renderAuthUserbar();
   WORKSPACE.hydrating=true;ensureDateChanges();setTab(S.tab);renderAll();WORKSPACE.hydrating=false;sharedReady=restoreSharedConnection();
 }
 async function loadWorkspace(){
@@ -466,11 +531,11 @@ async function loadWorkspace(){
     const response=await fetch('/api/workspace',{headers:workspaceHeaders(),cache:'no-store',signal:AbortSignal.timeout(12000)});
     if(response.status===404||!response.headers.get('content-type')?.includes('application/json')){WORKSPACE.mode='local';finishWorkspace();return}
     const result=await response.json();
-    if(response.status===401){WORKSPACE.key='';try{sessionStorage.removeItem('cf-access-key-v1')}catch{}showWorkspaceGate('Ingresá la clave para abrir los datos de esta instalación.','key');return}
+    if(response.status===401){if(AUTH.mode==='users')return showAuthGate('login','La sesión venció. Iniciá sesión nuevamente.');WORKSPACE.key='';try{sessionStorage.removeItem('cf-access-key-v1')}catch{}showWorkspaceGate('Ingresá la clave para abrir los datos de esta instalación.','key');return}
     if(!response.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos.');
     if(result.mode==='local'){WORKSPACE.mode='local';finishWorkspace();return}
     WORKSPACE.revision=result.revision;WORKSPACE.updatedAt=result.updatedAt;
-    if(!result.payload){showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
+    if(!result.payload){if(AUTH.mode==='users'){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.saldo=0;S.ref=reportToday();S.bal={};for(const state of Object.values(REPORT_STATE))if(state.filters&&'empresa' in state.filters)state.filters.empresa=AUTH.company.code;return initializeWorkspace(false)}showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
     if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
     Object.assign(S,result.payload.state);
     for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
@@ -1471,10 +1536,44 @@ function loadExample(k){const ref=S.ref,o=[];const mAdd=(s,n,day)=>{const d=D(s)
     for(let i=-1;i<=2;i++){const mes=mAdd(ref,i,1).slice(0,7);if(k!=='PPTO'&&i>=0)continue;let j=0;for(const[c,v]of Object.entries(base)){j++;if(k==='EJC'&&!isIn(c)||k==='EJP'&&isIn(c))continue;const f=k!=='PPTO'?(1+((j*37%17)-8)/100):1+i*0.03;o.push({mes,cat:c,imp:Math.round(v*f),ej:1})}}}
   clearOvr(k);S.data[k]={rows:o,orig:'Datos de ejemplo',at:reportToday()};save()}
 
+async function adminApi(path,method='GET',body){
+  const response=await fetch(path,{method,headers:body?{'content-type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo completar la operación.');return result;
+}
+async function renderUsers(host=$('#v-usr')){
+  if(AUTH.user?.role!=='admin'){host.innerHTML='<p class="note">Esta sección requiere el rol de administrador.</p>';return}
+  host.innerHTML='<p class="note">Cargando usuarios y empresas…</p>';
+  let users,companies,migration;try{[{users},{companies},migration]=await Promise.all([adminApi('/api/users'),adminApi('/api/companies'),adminApi('/api/migrate').catch(()=>({available:false}))])}catch(error){host.innerHTML=`<p class="note" role="alert">${esc(error.message)}</p>`;return}
+  host.innerHTML=`<h2>Usuarios y empresas</h2><p class="note">Solo un administrador puede crear usuarios, cambiar roles y asignar empresas.</p>
+  <div class="auth-admin-grid"><div class="card"><h3>Usuarios</h3><input id="authUserSearch" type="search" placeholder="Buscar por nombre o email" aria-label="Buscar usuarios"><div id="authUserList" class="tblwrap"></div></div>
+  <div class="card"><h3 id="authUserFormTitle">Crear usuario</h3><form id="authUserForm"><input type="hidden" id="authEditId">
+  <label for="authEditName">Nombre y apellido</label><input id="authEditName" required maxlength="120">
+  <label for="authEditEmail">Email</label><input id="authEditEmail" type="email" required maxlength="254">
+  <label for="authEditPassword">Contraseña inicial o nueva</label><input id="authEditPassword" type="password" minlength="12" autocomplete="new-password" placeholder="Mínimo 12 caracteres">
+  <label for="authEditRole">Rol</label><select id="authEditRole"><option value="user">Usuario estándar</option><option value="admin">Administrador</option></select>
+  <label><input id="authEditActive" type="checkbox" checked> Activo</label><strong>Empresas habilitadas</strong>
+  <div class="auth-company-list">${companies.filter(c=>c.active).map(c=>`<label><input type="checkbox" data-auth-company="${esc(c.id)}"> ${esc(c.name)} (${esc(c.code)})</label>`).join('')||'<p class="note">Todavía no hay empresas cargadas.</p>'}</div>
+  <div class="workspace-gate-actions"><button class="btn pri" type="submit">Guardar usuario</button><button class="btn" id="authNewUser" type="button">Nuevo</button></div><p class="msg" id="authUserMessage" role="status"></p></form></div></div>
+  <div class="card" style="margin-top:16px"><h3>Empresas disponibles</h3><p class="note">El código debe coincidir con el parámetro Empresa de Finnegans.</p><p>${companies.map(c=>`${esc(c.name)} (${esc(c.code)})`).join(' · ')||'Sin empresas'}</p>
+  <form id="authCompanyForm" class="workspace-gate-actions"><input id="authCompanyCode" placeholder="Código Finnegans" required maxlength="64"><input id="authCompanyName" placeholder="Nombre de empresa" required maxlength="120"><button class="btn" type="submit">Agregar empresa</button></form><p class="msg" id="authCompanyMessage" role="status"></p></div>
+  ${migration.available?`<div class="card" style="margin-top:16px"><h3>Migrar datos anteriores</h3><p class="note">La base anterior se conserva. Se copiarán solo los movimientos con el nombre exacto de la empresa elegida. ${migration.preview.unassigned} registros sin empresa requieren revisión y no se migran.</p><p class="note">${migration.preview.companies.map(c=>`${esc(c.name)}: ${c.count} movimientos`).join(' · ')}</p><div class="workspace-gate-actions"><select id="authMigrationCompany" aria-label="Empresa para migrar">${companies.filter(c=>c.active).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select><button class="btn" id="authMigrate" type="button">Migrar empresa</button></div><p class="msg" id="authMigrationMessage" role="status"></p></div>`:''}`;
+  const list=host.querySelector('#authUserList'),search=host.querySelector('#authUserSearch');
+  const showList=()=>{const q=search.value.trim().toLowerCase(),shown=users.filter(u=>!q||(u.name+' '+u.email).toLowerCase().includes(q));list.innerHTML=`<table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Empresas</th><th></th></tr></thead><tbody>${shown.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role==='admin'?'Administrador':'Usuario'}</td><td>${u.active?'Activo':'Inactivo'}</td><td>${(u.company_ids||[]).length}</td><td><button class="btn" type="button" data-auth-edit="${esc(u.id)}">Editar</button></td></tr>`).join('')}</tbody></table>`;
+    list.querySelectorAll('[data-auth-edit]').forEach(button=>button.onclick=()=>{const u=users.find(x=>x.id===button.dataset.authEdit);host.querySelector('#authEditId').value=u.id;host.querySelector('#authEditName').value=u.name;host.querySelector('#authEditEmail').value=u.email;host.querySelector('#authEditPassword').value='';host.querySelector('#authEditRole').value=u.role;host.querySelector('#authEditActive').checked=u.active;host.querySelectorAll('[data-auth-company]').forEach(input=>input.checked=(u.company_ids||[]).includes(input.dataset.authCompany));host.querySelector('#authUserFormTitle').textContent='Editar usuario';host.querySelector('#authUserForm').scrollIntoView({behavior:'smooth',block:'nearest'})})};
+  showList();search.oninput=showList;
+  host.querySelector('#authNewUser').onclick=()=>{host.querySelector('#authUserForm').reset();host.querySelector('#authEditId').value='';host.querySelector('#authUserFormTitle').textContent='Crear usuario'};
+  host.querySelector('#authUserForm').onsubmit=async e=>{e.preventDefault();const id=host.querySelector('#authEditId').value,pw=host.querySelector('#authEditPassword').value;
+    const body={...(id?{id}:{}),name:host.querySelector('#authEditName').value,email:host.querySelector('#authEditEmail').value,role:host.querySelector('#authEditRole').value,active:host.querySelector('#authEditActive').checked,companyIds:[...host.querySelectorAll('[data-auth-company]:checked')].map(input=>input.dataset.authCompany),...(pw?{password:pw}:{})};
+    try{await adminApi('/api/users',id?'PATCH':'POST',body);const me=await adminApi('/api/auth');AUTH.companies=me.companies||[];AUTH.company=me.company||null;if(!AUTH.company&&AUTH.companies.length)return showAuthGate('company','Elegí una empresa para continuar.');renderUsers(host)}catch(error){host.querySelector('#authUserMessage').textContent=error.message}};
+  host.querySelector('#authCompanyForm').onsubmit=async e=>{e.preventDefault();try{await adminApi('/api/companies','POST',{code:host.querySelector('#authCompanyCode').value,name:host.querySelector('#authCompanyName').value});renderUsers(host)}catch(error){host.querySelector('#authCompanyMessage').textContent=error.message}};
+  if(host.querySelector('#authMigrate'))host.querySelector('#authMigrate').onclick=async()=>{const selector=host.querySelector('#authMigrationCompany'),company=companies.find(c=>c.id===selector.value);if(!company||!confirm(`¿Copiar los movimientos de ${company.name} desde la base anterior? No se borrarán los datos originales.`))return;
+    try{const result=await adminApi('/api/migrate','POST',{companyId:company.id});host.querySelector('#authMigrationMessage').textContent=`${result.count} movimientos copiados. Elegí la empresa para verlos.`}catch(error){host.querySelector('#authMigrationMessage').textContent=error.message}};
+}
+
 /* ---------- shell ---------- */
 function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;saveView();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
-function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat})[S.tab]()}
+function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat,usr:renderUsers})[S.tab]()}
 function renderAll(){
   const bank=bankBalance();$('#pRef').value=S.ref;$('#pTc').value=S.tc>0?nf1.format(S.tc):'';$('#pSaldo').value=bank?nf0.format(bank.value):S.saldoFecha===S.ref&&(S.saldoManualSet||S.saldo)?nf0.format(S.saldo):'';$('#pSaldo').disabled=!!bank;$('#pSaldo').title=bank?'Saldo tomado de Finnegans al '+fd(bank.date):'Ingresá el saldo correspondiente a la fecha de corte';$('#pHor').value=S.hor;$('#pAmounts').value=AMOUNT_UNIT;$('#pChq').checked=S.incChq;
   document.querySelectorAll('#pGran button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===S.gran));
@@ -1510,7 +1609,16 @@ $('#workspaceGateForm').onsubmit=e=>{e.preventDefault();WORKSPACE.key=$('#worksp
 $('#workspaceImport').onclick=()=>initializeWorkspace(false);
 $('#workspaceEmpty').onclick=()=>initializeWorkspace(true);
 $('#workspaceRetry').onclick=loadWorkspace;
-loadWorkspace();
+$('#authShowPassword').onclick=()=>{const input=$('#authPassword');input.type=input.type==='password'?'text':'password';$('#authShowPassword').textContent=input.type==='password'?'Mostrar':'Ocultar'};
+$('#authShowNewPassword').onclick=()=>{const input=$('#authNewPassword');input.type=input.type==='password'?'text':'password';$('#authShowNewPassword').textContent=input.type==='password'?'Mostrar':'Ocultar'};
+$('#authLoginForm').onsubmit=async e=>{e.preventDefault();try{const data=await authRequest({action:'login',email:$('#authEmail').value,password:$('#authPassword').value});AUTH.user=data.user;AUTH.company=data.company;AUTH.companies=data.companies;if(!AUTH.company)return showAuthGate('company',AUTH.companies.length?'':'No tenés empresas habilitadas.');loadWorkspace()}catch(error){showAuthGate('login',error.message)}};
+$('#authForgot').onclick=()=>showAuthGate('recovery',AUTH.recoveryAvailable?'':'La recuperación por correo aún no está configurada. Solicitá ayuda al administrador.');
+document.querySelectorAll('[data-auth-back]').forEach(button=>button.onclick=()=>{history.replaceState({},'',location.pathname);showAuthGate('login')});
+$('#authRecoveryForm').onsubmit=async e=>{e.preventDefault();try{const result=await authRequest({action:'request-reset',email:$('#authRecoveryEmail').value});showAuthGate('recovery',result.message)}catch(error){showAuthGate('recovery',error.message)}};
+$('#authResetForm').onsubmit=async e=>{e.preventDefault();try{const result=await authRequest({action:'reset',token:new URLSearchParams(location.search).get('reset'),password:$('#authNewPassword').value,confirmPassword:$('#authConfirmPassword').value});history.replaceState({},'',location.pathname);showAuthGate('login',result.message)}catch(error){showAuthGate('reset',error.message)}};
+$('#authChooseCompany').onclick=async()=>{try{AUTH.company=(await authRequest({action:'select-company',companyId:$('#authCompanySelect').value})).company;loadWorkspace()}catch(error){showAuthGate('company',error.message)}};
+$('#authCompanyLogout').onclick=async()=>{try{await authRequest({action:'logout'})}finally{location.reload()}};
+loadAuth();
 addEventListener('focus',syncReportDates);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncReportDates();else if(WORKSPACE.mode==='ready')flushWorkspaceSave()});
 setInterval(syncReportDates,60000);

@@ -1,12 +1,20 @@
 'use strict';
 const {sharedConfig,sharedToken}=require('../lib/finnegans-shared.cjs');
 const {authorize}=require('../lib/workspace-auth.cjs');
+const {usersEnabled}=require('../lib/auth-session.cjs');
 module.exports=async function(req,res){
   res.setHeader('Cache-Control','no-store, private');res.setHeader('Vercel-CDN-Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)throw new Error()}catch{return res.status(403).json({error:'La solicitud debe realizarse desde esta aplicación.'})}}
-  if(!authorize(req,res))return;
-  if(req.method==='GET')return res.status(200).json(sharedConfig());
+  if(!await authorize(req,res))return;
+  if(req.method==='GET'){
+    const config=sharedConfig();
+    if(usersEnabled()){
+      for(const source of Object.values(config.sources))source.filters.empresa=req.cashflowAuth.company.code;
+      config.defaults.BCO={empresa:req.cashflowAuth.company.code};
+    }
+    return res.status(200).json(config);
+  }
   if(req.method==='POST'){
     if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato de la solicitud debe ser JSON.'});
     try{await sharedToken();return res.status(200).json({connected:true})}catch(e){return res.status(e.status||502).json({error:e.message})}

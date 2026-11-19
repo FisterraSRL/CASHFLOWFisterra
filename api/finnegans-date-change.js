@@ -1,6 +1,8 @@
 'use strict';
 const {authorize,protectedDeployment}=require('../lib/workspace-auth.cjs');
 const {readWorkspace}=require('../lib/workspace-store.cjs');
+const {readCompanyWorkspace}=require('../lib/company-workspace.cjs');
+const {usersEnabled}=require('../lib/auth-session.cjs');
 const {sharedToken}=require('../lib/finnegans-shared.cjs');
 
 const validDate=value=>{
@@ -15,20 +17,20 @@ module.exports=async function handler(req,res){
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Usá POST para confirmar un cambio de fecha.'})}
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)throw new Error()}catch{return res.status(403).json({error:'La solicitud debe realizarse desde esta aplicación.'})}}
-  if(!authorize(req,res))return;
+  if(!await authorize(req,res))return;
   if((req.headers['content-type']||'').split(';')[0].trim().toLowerCase()!=='application/json')return res.status(415).json({error:'El formato de la solicitud debe ser JSON.'});
   if(Number(req.headers['content-length'])>2048)return res.status(413).json({error:'La solicitud es demasiado grande.'});
   let body=req.body;
   try{if(typeof body==='string'){if(Buffer.byteLength(body)>2048)throw new Error();body=JSON.parse(body)}}catch{return res.status(400).json({error:'La solicitud no contiene JSON válido.'})}
   const source=body?.source,id=body?.asientoItemId,date=body?.date;
   if(!['CLI','PRV'].includes(source)||!validId(id)||!validDate(date))return res.status(400).json({error:'El documento o la fecha no son válidos.'});
-  if(protectedDeployment()){
-    let workspace;try{workspace=await readWorkspace()}catch{return res.status(503).json({error:'No se pudieron verificar los cambios pendientes.'})}
+  if(usersEnabled()||protectedDeployment()){
+    let workspace;try{workspace=await(usersEnabled()?readCompanyWorkspace(req.cashflowAuth.company.id):readWorkspace())}catch{return res.status(503).json({error:'No se pudieron verificar los cambios pendientes.'})}
     const pending=workspace.payload?.state?.dateChanges?.[source+'|'+String(id)];
-    if(!pending||pending.status==='sent'||pending.source!==source||String(pending.asientoItemId)!==String(id)||pending.date!==date)return res.status(409).json({error:'El cambio pendiente ya no coincide con los datos guardados. Recargá la aplicación antes de enviarlo.'});
+    if(!pending||pending.status==='sent'||pending.source!==source||String(pending.asientoItemId)!==String(id)||pending.date!==date||usersEnabled()&&pending.company!==req.cashflowAuth.company.name)return res.status(409).json({error:'El cambio pendiente ya no coincide con los datos guardados. Recargá la aplicación antes de enviarlo.'});
   }
   let token=body.access_token;
-  if(body.shared===true){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
+  if(usersEnabled()||body.shared===true){try{token=await sharedToken()}catch(e){return res.status(e.status||502).json({error:e.message})}}
   if(typeof token!=='string'||!token||token.length>16384||!/^[A-Za-z0-9._~+\/-]+=*$/.test(token))return res.status(400).json({error:'Obtené un token válido antes de enviar el cambio.'});
   const url=new URL('https://api.finneg.com/api/reports/ActualizarFechaCashflowAsientoItem');
   url.searchParams.set('ACCESS_TOKEN',token);url.searchParams.set('AsientoItemID',String(id));url.searchParams.set('FechaCashflow',date);
