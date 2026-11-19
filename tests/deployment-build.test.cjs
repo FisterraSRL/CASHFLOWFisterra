@@ -6,7 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
 
-test('one source builds an empty customer installation and keeps the Fisterra example separate',t=>{
+test('one source builds an empty customer installation and keeps Fisterra data separate',t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cashflow-build-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   function build(name,file){
@@ -27,9 +27,9 @@ test('one source builds an empty customer installation and keeps the Fisterra ex
   assert.deepEqual(nubiral.data.mov,[]);
   assert.deepEqual(nubiral.data.cartera,[]);
   assert.equal(nubiral.data.tc,0);
-  assert.doesNotMatch(nubiral.html,/FISTERRA EJEMPLO/);
+  assert.doesNotMatch(nubiral.html,/<span class="company">FISTERRA<\/span>/);
   const fisterra=build(null,'fisterra.html');
   assert.ok(fisterra.data.mov.length>0);
   assert.ok(fisterra.data.mov.length>nubiral.data.mov.length);
-  assert.match(fisterra.html,/<span class="company">FISTERRA EJEMPLO<\/span>/);
+  assert.match(fisterra.html,/<span class="company">FISTERRA<\/span>/);
 });

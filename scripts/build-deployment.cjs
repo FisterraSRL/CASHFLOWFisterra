@@ -22,10 +22,10 @@ replaceOnce('<!--FISTERRA_LOGO-->',read('app/brand/logo/fisterra-lockup-horizont
 const data=installation?{ref:'2000-01-01',tc:0,mov:[],cartera:[]}:JSON.parse(read('data/sample/data.json').toString('utf8'));
 if(installation){
   replaceOnce('<title>Fisterra · Cashflow</title>',`<title>${installation} · Cashflow</title>`);
-  replaceOnce('<span class="company">FISTERRA EJEMPLO</span>',`<span class="company">${installation.toLocaleUpperCase('es-AR')}</span>`);
+  replaceOnce('<span class="company">FISTERRA</span>',`<span class="company">${installation.toLocaleUpperCase('es-AR')}</span>`);
 }
 replaceOnce('/*DATA*/',JSON.stringify(data).replace(/</g,'\\u003c'));
 const output=process.argv[2]?path.resolve(process.argv[2]):path.join(root,'dist/cashflow.html');
 fs.mkdirSync(path.dirname(output),{recursive:true});
 fs.writeFileSync(output,html,'utf8');
-process.stdout.write(`App generada para ${installation||'Fisterra Ejemplo'} en ${output}\n`);
+process.stdout.write(`App generada para ${installation||'Fisterra'} en ${output}\n`);
