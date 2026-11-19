@@ -76,6 +76,10 @@ test('preserves original MXN, CLP and EUR amounts for explicit conversion',()=>{
   assert.equal(r.m,amount);
  }
 });
+test('maps Finnegans Dolar Divisa to USD and preserves the original dollar amount',()=>{
+ const row=normalizeReport('PRV',[fixture({PROVEEDOR:'P',CUENTA:'PROVEEDORES',MONEDA:'Dolar Divisa',IMPORTEMONPPAL:-151700,IMPORTEMONTRAN:-100})],'2026-10-15').rows[0];
+ assert.equal(row.c,'USD');assert.equal(row.m,-100);
+});
 test('supplier FechaVto takes priority over other date aliases, and signs are preserved',()=>{
  const f=fixture({PROVEEDOR:'Proveedor de prueba',ORGANIZACION:undefined,CUENTA:'PROVEEDORES',MONEDA:'Pesos',IMPORTEMONPPAL:-500,FechaVencimientoActual:'2026-10-10'});
  const r=normalizeReport('PRV',[f],'2026-10-15').rows[0];assert.equal(r.f,'2026-10-01');assert.equal(r.m,-500);assert.equal(r.cat,'Proveedores');
