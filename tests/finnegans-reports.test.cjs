@@ -80,6 +80,13 @@ test('maps Finnegans Dolar Divisa to USD and preserves the original dollar amoun
  const row=normalizeReport('PRV',[fixture({PROVEEDOR:'P',CUENTA:'PROVEEDORES',MONEDA:'Dolar Divisa',IMPORTEMONPPAL:-151700,IMPORTEMONTRAN:-100})],'2026-10-15').rows[0];
  assert.equal(row.c,'USD');assert.equal(row.m,-100);
 });
+test('maps any Finnegans currency description containing dolar to USD for customers and suppliers',()=>{
+ for(const source of ['CLI','PRV'])for(const currency of ['Dolar Billete','Dólar billete','DOLARES EN CUENTA']){
+  const raw=fixture({PROVEEDOR:'Proveedor',CUENTA:'PROVEEDORES',MONEDA:currency,IMPORTEMONPPAL:151700,IMPORTEMONTRAN:100});
+  const row=normalizeReport(source,[raw],'2026-10-15').rows[0];
+  assert.equal(row.c,'USD');assert.equal(row.m,100);
+ }
+});
 test('supplier FechaVto takes priority over other date aliases, and signs are preserved',()=>{
  const f=fixture({PROVEEDOR:'Proveedor de prueba',ORGANIZACION:undefined,CUENTA:'PROVEEDORES',MONEDA:'Pesos',IMPORTEMONPPAL:-500,FechaVencimientoActual:'2026-10-10'});
  const r=normalizeReport('PRV',[f],'2026-10-15').rows[0];assert.equal(r.f,'2026-10-01');assert.equal(r.m,-500);assert.equal(r.cat,'Proveedores');
