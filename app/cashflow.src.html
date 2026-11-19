@@ -448,6 +448,7 @@ function finishWorkspace(){
   document.body.className='workspace-ready';
   if(WORKSPACE.started){renderAll();return}
   WORKSPACE.started=true;
+  if(AUTH.mode==='users'&&AUTH.user?.role==='admin')S.tab='usr';
   if(WORKSPACE.mode==='ready')try{localStorage.removeItem(LS);localStorage.removeItem(REPORT_FILTER_KEY)}catch{}
   credentialsReady=AUTH.mode==='users'?Promise.resolve():restoreCredentials().then(syncWorkspaceCredentials).finally(()=>{if(S.tab==='dat')renderDat()});
   renderAuthUserbar();
