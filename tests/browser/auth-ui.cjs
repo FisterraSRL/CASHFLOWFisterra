@@ -26,10 +26,12 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       let raw='';for await(const part of req)raw+=part;const ids=JSON.parse(raw).companyIds;
       if(ids.length!==2||ids[0]!==company.id||ids[1]!==second.id)return json(400,{error:'Selección inválida'});
       const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Buenos_Aires'}).format(new Date());
-      const state=(name,saldo,cobro,pago)=>({saldo,saldoFecha:today,saldoManualSet:true,tc:1000,fx:{},data:{
+      const state=(name,saldo,cobro,pago)=>({saldo,saldoFecha:today,saldoManualSet:true,tc:1000,fx:{CLP:2},data:{
         CLI:{rows:[{s:'CLI',id:name+'-CLI',company:name,p:'Cliente',cat:'Cobranza clientes',f:today,m:cobro,c:'ARS'}],at:today},
         PRV:{rows:[{s:'PRV',id:name+'-PRV',company:name,p:'Proveedor',cat:'Proveedores',f:today,m:-pago,c:'ARS'}],at:today},
-        CHP:{rows:[],lastCheck:{status:'empty'}},CHT:{rows:[],lastCheck:{status:'empty'}},BCO:{rows:[]}}});
+        CHP:{rows:[],lastCheck:{status:'empty'}},CHT:{rows:[],lastCheck:{status:'empty'}},BCO:{rows:[]},
+        EJC:{orig:'Finnegans · API',at:today,period:{from:today.slice(0,7)+'-01',to:today},rows:[{mes:today.slice(0,7),f:today,imp:cobro,p:'Cliente',doc:'COBRO',cat:'Cobranza clientes',account:'Banco',originalCurrency:name.includes('CHILE')?'CLP':'ARS',originalAmount:cobro}],applications:[{mes:today.slice(0,7),f:today,imp:9,p:'Cliente',doc:'COBRO',appliedDoc:'FACTURA'}]},
+        EJP:{orig:'Finnegans · API',at:today,period:{from:today.slice(0,7)+'-01',to:today},rows:[{mes:today.slice(0,7),f:today,imp:pago,p:'Proveedor',doc:'PAGO',cat:'Proveedores',account:'Banco',originalCurrency:name.includes('CHILE')?'CLP':'ARS',originalAmount:pago}]}}});
       return json(200,{workspaces:[{company,updatedAt:null,state:state(company.name,100,40,20)},{company:second,updatedAt:null,state:state(second.name,200,60,30)}]});
     }
     if(req.url==='/api/users')return json(200,{users:[{...user,active:true,company_ids:[company.id]}]});
@@ -83,6 +85,20 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     const detail=await page.locator('#drawerHost').innerText();
     assert.match(detail,/FISTERRA SRL/);assert.match(detail,/FISTERRA CHILE S\.P\.A\./);
     await page.locator('#drawerHost [data-x].btn').click();
+    await page.locator('nav.tabs button[data-t="eje"]').click();
+    await page.getByText('Ejecutado consolidado · cobros y pagos').waitFor();
+    const executed=await page.locator('#v-eje').innerText();
+    assert.match(executed,/FISTERRA SRL/);assert.match(executed,/FISTERRA CHILE S\.P\.A\./);
+    assert.match(executed,/\$ 160/);assert.match(executed,/−\$ 80/);assert.match(executed,/\$ 80/);
+    assert.match(executed,/Aplicaciones a comprobantes \(2\)/);
+    await page.locator('#v-eje details').last().locator('summary').click();
+    assert.equal(await page.locator('#v-eje details').last().locator('tbody tr').count(),2);
+    if(process.env.CONSOLIDATED_EXECUTED_SCREENSHOT)await page.screenshot({path:process.env.CONSOLIDATED_EXECUTED_SCREENSHOT,fullPage:true});
+    await page.evaluate(()=>{CONS.workspaces[1].state.fx.CLP=0;renderExecuted()});
+    assert.match(await page.locator('#v-eje').innerText(),/FALTAN COTIZACIONES/);
+    await page.evaluate(()=>{CONS.workspaces[1].state.fx.CLP=2;CONS.workspaces[1].state.data.EJP.period.from=reportToday();renderExecuted()});
+    assert.match(await page.locator('#v-eje').innerText(),/El neto y la cobertura se ocultan/);
+    await page.evaluate(()=>{CONS.workspaces[1].state.data.EJP.period.from=reportToday().slice(0,7)+'-01';renderExecuted()});
     await page.reload();await page.locator('nav.tabs button[data-t="flu"]').waitFor({state:'visible'});
     await page.locator('nav.tabs button[data-t="flu"]').click();
     assert.equal(await page.locator(`[data-cons-company="${second.id}"]`).isVisible(),true);

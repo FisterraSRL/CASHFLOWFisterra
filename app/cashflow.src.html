@@ -304,7 +304,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.31">v1.0.31</span>
+    <span class="app-version" aria-label="Versión 1.0.32">v1.0.32</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
     <div class="auth-userbar" id="authUserbar" hidden></div>
@@ -602,9 +602,9 @@ function consolidatedIds(){
 }
 function consolidatedPicker(){
   if(AUTH.mode!=='users'||AUTH.companies.length<2)return '';
-  return `<div class="card consolidated-picker"><h2>Empresas seleccionadas</h2><p class="note">Elegí hasta 8 empresas habilitadas. La selección se aplica al flujo de fondos y a vencimientos; usa los datos guardados y no modifica ninguna empresa.</p><div class="choices">${AUTH.companies.map(c=>`<label><input type="checkbox" data-cons-company="${esc(c.id)}"${CONS.ids.has(c.id)||c.id===AUTH.company.id?' checked':''}${c.id===AUTH.company.id?' disabled':''}> ${esc(c.name)}${c.id===AUTH.company.id?' · actual':''}</label>`).join('')}</div>${CONS.ids.size>1?'<button type="button" class="btn" id="consRefresh">Actualizar vista</button>':''}</div>`;
+  return `<div class="card consolidated-picker"><h2>Empresas seleccionadas</h2><p class="note">Elegí hasta 8 empresas habilitadas. La selección se aplica al flujo de fondos, a vencimientos y al ejecutado; usa los datos guardados y no modifica ninguna empresa.</p><div class="choices">${AUTH.companies.map(c=>`<label><input type="checkbox" data-cons-company="${esc(c.id)}"${CONS.ids.has(c.id)||c.id===AUTH.company.id?' checked':''}${c.id===AUTH.company.id?' disabled':''}> ${esc(c.name)}${c.id===AUTH.company.id?' · actual':''}</label>`).join('')}</div>${CONS.ids.size>1?'<button type="button" class="btn" id="consRefresh">Actualizar vista</button>':''}</div>`;
 }
-function renderConsolidatedTab(){if(S.tab==='ven')renderVen();else renderFlu()}
+function renderConsolidatedTab(){if(S.tab==='ven')renderVen();else if(S.tab==='eje')renderExecuted();else renderFlu()}
 function bindConsolidatedPicker(){
   document.querySelectorAll('[data-cons-company]').forEach(input=>input.onchange=()=>{
     if(input.checked&&CONS.ids.size>=8){input.checked=false;return}
@@ -654,7 +654,7 @@ async function loadConsolidated(ids,key){
     const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo cargar el consolidado.');
     if(CONS.key===key)CONS.workspaces=data.workspaces;
   }catch(error){if(CONS.key===key)CONS.error=error.message||'No se pudo cargar el consolidado.'}
-  finally{if(CONS.key===key){CONS.busy=false;if(S.tab==='flu'||S.tab==='ven')renderConsolidatedTab()}}
+  finally{if(CONS.key===key){CONS.busy=false;if(['flu','ven','eje'].includes(S.tab))renderConsolidatedTab()}}
 }
 function renderConsolidatedFlu(ids){
   const v=$('#v-flu'),key=ids.join('|');
@@ -997,13 +997,13 @@ function renderVen(){
   v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openDrawer('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[],''))}
 
 /* ---------- PRESUPUESTO ---------- */
-function executedPeriod(source){
-  const d=S.data[source];if(d.orig!=='Finnegans · API')return null;
+function executedPeriod(source,state=S){
+  const d=state.data?.[source];if(d?.orig!=='Finnegans · API')return null;
   const from=d.period?.from||d.filters?.fechaDesde,to=d.period?.to||d.filters?.fecha;
   return /^\d{4}-\d{2}-\d{2}$/.test(from||'')&&/^\d{4}-\d{2}-\d{2}$/.test(to||'')&&from<=to?{from,to}:null;
 }
-function executedMonthRange(source,m,rows){
-  const p=executedPeriod(source);
+function executedMonthRange(source,m,rows,state=S){
+  const p=executedPeriod(source,state);
   if(!p)return rows.length?{from:m+'-01',to:addD(addD(m+'-01',32).slice(0,7)+'-01',-1)}:null;
   const first=m+'-01',last=addD(addD(first,32).slice(0,7)+'-01',-1),from=p.from>first?p.from:first,to=p.to<last?p.to:last;
   return from<=to?{from,to}:null;
@@ -1023,7 +1023,75 @@ function executedReport(){
   const applications=[...(S.data.EJC.applications||[]).map(r=>({...r,type:'Cobro'})),...(S.data.EJP.applications||[]).map(r=>({...r,type:'Pago'}))].filter(r=>selected.includes(r.mes));
   return {months,monthly,inRows,outRows,income,payments,complete,hasIncome:monthly.length>0&&monthly.every(m=>m.hasIn),hasPayments:monthly.length>0&&monthly.every(m=>m.hasOut),net:complete?income-payments:null,coverage:complete&&payments>0?income/payments:null,inCats:group(inRows),outCats:group(outRows),accounts:group(inRows.filter(r=>r.account),'account'),payAccounts:group(outRows.filter(r=>r.account),'account'),applications};
 }
+function renderConsolidatedExecuted(ids){
+  const v=$('#v-eje'),key=ids.join('|');
+  if(CONS.key!==key){CONS.key=key;CONS.workspaces=null;CONS.error='';loadConsolidated(ids,key)}
+  const picker=consolidatedPicker();
+  if(CONS.busy||!CONS.workspaces){v.innerHTML=picker+`<div class="card" role="status">${esc(CONS.error||'Cargando el ejecutado de las empresas seleccionadas…')}</div>`;bindConsolidatedPicker();return}
+  const conversionWarnings=[];
+  const sources=CONS.workspaces.map(w=>{
+    const state=w.state||{data:{}},data=state.data||{},converted={};
+    for(const source of ['EJC','EJP'])converted[source]=(data[source]?.rows||[]).map(r=>{
+      const raw=String(r.originalCurrency||'').trim(),currency=raw?(excelCurrency(raw)||(/dolar/i.test(raw)?'USD':null)):(r.c||'ARS');
+      const rate=currency==='ARS'?1:currency==='USD'?Number(state.tc):Number(state.fx?.[currency]);
+      const amount=currency==='ARS'?Number(r.imp):Number(r.originalAmount);
+      if(!currency||!(rate>0)||!Number.isFinite(amount)){
+        conversionWarnings.push(`${w.company.name}: ${source==='EJC'?'cobro':'pago'} ${r.doc||r.id||'sin comprobante'} sin importe original o cotización válida para ${currency||raw||'su moneda'}.`);
+        return {...r,imp:NaN};
+      }
+      return {...r,imp:amount*rate};
+    });
+    return {company:w.company,state,converted,updatedAt:w.updatedAt};
+  });
+  const months=new Set();
+  for(const x of sources)for(const source of ['EJC','EJP']){
+    const d=x.state.data?.[source]||{},period=executedPeriod(source,x.state);
+    for(const r of d.rows||[])if(/^\d{4}-\d{2}$/.test(r.mes||''))months.add(r.mes);
+    if(period)for(let m=period.from.slice(0,7);m<=period.to.slice(0,7);m=addD(m+'-01',32).slice(0,7))months.add(m);
+  }
+  const allMonths=[...months].sort();if(S.execMonth!=='all'&&!months.has(S.execMonth))S.execMonth='all';
+  const selected=allMonths.filter(m=>S.execMonth==='all'||m===S.execMonth),monthName=m=>MES[+m.slice(5)-1]+' '+m.slice(0,4);
+  const sum=rows=>rows.reduce((n,r)=>n+Number(r.imp||0),0);
+  const records=[],applications=[],monthly=[],byCompany=[],warnings=[];
+  for(const x of sources){
+    const d=x.state.data||{},incoming=x.converted.EJC.filter(r=>selected.includes(r.mes)),outgoing=x.converted.EJP.filter(r=>selected.includes(r.mes));
+    const inAmount=sum(incoming),outAmount=sum(outgoing);
+    byCompany.push({name:x.company.name,in:inAmount,out:outAmount,inCount:incoming.length,outCount:outgoing.length});
+    records.push(...incoming.map(r=>({...r,type:'Cobro',companyName:x.company.name})),...outgoing.map(r=>({...r,type:'Pago',companyName:x.company.name})));
+    applications.push(...(d.EJC?.applications||[]).filter(r=>selected.includes(r.mes)).map(r=>({...r,type:'Cobro',companyName:x.company.name})),...(d.EJP?.applications||[]).filter(r=>selected.includes(r.mes)).map(r=>({...r,type:'Pago',companyName:x.company.name})));
+    for(const source of ['EJC','EJP']){const entry=d[source];if(!entry?.rows?.length&&entry?.lastCheck?.status!=='empty')warnings.push(`${x.company.name}: ${SRC[source].n} sin datos.`);else if(entry.at&&entry.at!==reportToday())warnings.push(`${x.company.name}: ${SRC[source].n} al ${fd(entry.at)}.`)}
+  }
+  for(const m of selected){
+    const ranges=[],inRows=[],outRows=[];
+    for(const x of sources){
+      const a=x.converted.EJC.filter(r=>r.mes===m),b=x.converted.EJP.filter(r=>r.mes===m);
+      inRows.push(...a);outRows.push(...b);
+      ranges.push(executedMonthRange('EJC',m,a,x.state),executedMonthRange('EJP',m,b,x.state));
+    }
+    const complete=ranges.every(r=>r&&r.from===ranges[0].from&&r.to===ranges[0].to);
+    monthly.push({mes:m,in:sum(inRows),out:sum(outRows),complete,range:complete?ranges[0]:null});
+    if(!complete)warnings.push(`${monthName(m)}: faltan cobros o pagos de alguna empresa, o las fechas consultadas no coinciden.`);
+  }
+  if(conversionWarnings.length){v.innerHTML=picker+`<div class="banner" role="alert"><span class="chip" style="color:var(--crit)">Faltan cotizaciones</span><span>Completá las monedas e importes originales de las empresas seleccionadas para mostrar el ejecutado conjunto.</span></div><details class="card" open><summary>Ver ${conversionWarnings.length} observaciones</summary><ul>${conversionWarnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`;bindConsolidatedPicker();return}
+  const income=sum(records.filter(r=>r.type==='Cobro')),payments=sum(records.filter(r=>r.type==='Pago'));
+  const complete=monthly.length>0&&monthly.every(m=>m.complete),net=complete?income-payments:null;
+  const group=(rows,field)=>Object.entries(rows.reduce((a,r)=>{const key=r[field]||'Sin informar',v=a[key]||(a[key]={count:0,amount:0});v.count++;v.amount+=Number(r.imp||0);return a},{})).map(([name,values])=>({name,...values})).sort((a,b)=>b.amount-a.amount);
+  const groups=[['Cobros por categoría',records.filter(r=>r.type==='Cobro'),'cat',income],['Pagos por categoría',records.filter(r=>r.type==='Pago'),'cat',payments],['Cobros por cuenta y medio',records.filter(r=>r.type==='Cobro'&&r.account),'account',income],['Pagos por cuenta y medio',records.filter(r=>r.type==='Pago'&&r.account),'account',payments]];
+  const groupTable=([title,rows,field,total])=>{const items=group(rows,field);return `<div class="card"><h2>${title}</h2><p class="note">${rows.length} registros de ${sources.length} empresas.</p>${items.length?`<div class="tblwrap"><table><thead><tr><th>${field==='cat'?'Categoría':'Cuenta / medio'}</th><th>Registros</th><th>Total ($)</th><th>Participación</th></tr></thead><tbody>${items.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.count}</td><td>${$f(r.amount)}</td><td>${total?nf1.format(r.amount/total*100)+' %':'–'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Sin movimientos en el período seleccionado.</p>'}</div>`};
+  records.sort((a,b)=>a.mes.localeCompare(b.mes)||a.companyName.localeCompare(b.companyName)||a.type.localeCompare(b.type));
+  const periodSelect=`<div class="fld"><label for="execMonth">Período del ejecutado</label><select id="execMonth"><option value="all"${S.execMonth==='all'?' selected':''}>Todos los meses</option>${allMonths.map(m=>`<option value="${m}"${S.execMonth===m?' selected':''}>${monthName(m)}</option>`).join('')}</select></div>`;
+  v.innerHTML=picker+`<div class="toolbar"><div><h2>Ejecutado consolidado · cobros y pagos</h2><p class="note">${sources.length} empresas · importes en pesos argentinos; monedas originales convertidas con las cotizaciones guardadas de cada empresa · vista de solo lectura. Las aplicaciones a facturas no se suman dos veces.</p></div>${periodSelect}</div>
+  ${warnings.length?`<div class="banner" role="status"><span class="chip" style="color:var(--crit)">Revisar datos</span><span>${complete?'Revisá la antigüedad de las fuentes antes de usar el análisis.':'El neto y la cobertura se ocultan cuando faltan datos o las fechas consultadas no coinciden.'}</span></div><details class="card"><summary>Ver ${warnings.length} observaciones</summary><ul>${warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}
+  <div class="kpis"><div class="kpi"><div class="l">Cobros ejecutados</div><div class="v pos">${records.some(r=>r.type==='Cobro')?$M(income):'Sin datos'}</div><div class="s">${records.filter(r=>r.type==='Cobro').length} registros</div></div><div class="kpi"><div class="l">Pagos ejecutados</div><div class="v neg">${records.some(r=>r.type==='Pago')?$M(-payments):'Sin datos'}</div><div class="s">${records.filter(r=>r.type==='Pago').length} registros</div></div><div class="kpi"><div class="l">Neto ejecutado</div><div class="v${net===null?'':net<0?' neg':' pos'}">${net===null?'Sin datos':$M(net)}</div><div class="s">${complete?'Cobros menos pagos del mismo período':'Faltan datos o períodos coincidentes'}</div></div><div class="kpi"><div class="l">Cobertura de pagos</div><div class="v">${complete&&payments>0?nf1.format(income/payments*100)+' %':'–'}</div><div class="s">Cobros / pagos del mismo período</div></div></div>
+  <div class="card" style="margin-top:16px"><h2>Por empresa</h2><div class="tblwrap"><table><thead><tr><th>Empresa</th><th>Cobros ($)</th><th>Pagos ($)</th><th>Neto ($)</th><th>Registros</th></tr></thead><tbody>${byCompany.map(x=>`<tr><td>${esc(x.name)}</td><td>${$f(x.in)}</td><td>${$f(-x.out)}</td><td>${complete?$f(x.in-x.out):'Sin datos'}</td><td>${x.inCount+x.outCount}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="card" style="margin-top:16px"><h2>Evolución mensual</h2><div class="tblwrap"><table><thead><tr><th>Mes</th><th>Cobros ($)</th><th>Pagos ($)</th><th>Neto ($)</th><th>Cobertura</th></tr></thead><tbody>${monthly.map(m=>`<tr><td>${monthName(m.mes)}</td><td>${$f(m.in)}</td><td>${$f(-m.out)}</td><td>${m.complete?$f(m.in-m.out):'Sin datos'}</td><td>${m.complete&&m.out>0?nf1.format(m.in/m.out*100)+' %':'–'}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="exec-grid">${groups.map(groupTable).join('')}</div>
+  <div class="card" style="margin-top:16px"><details><summary>Ver registros de los reportes (${records.length})</summary><div class="tblwrap"><table><thead><tr><th>Empresa</th><th>Mes</th><th>Fecha</th><th>Tipo</th><th>Cliente / tercero</th><th>Comprobante</th><th>Cuenta / medio</th><th>Categoría</th><th>Importe ($)</th></tr></thead><tbody>${records.map(r=>`<tr><td>${esc(r.companyName)}</td><td>${monthName(r.mes)}</td><td>${r.f?fd(r.f):'–'}</td><td>${r.type}</td><td>${esc(r.p||'–')}</td><td>${esc(r.doc||'–')}</td><td>${esc(r.account||'–')}</td><td>${esc(r.cat||'–')}</td><td>${$f(r.type==='Pago'?-r.imp:r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>
+  ${applications.length?`<div class="card" style="margin-top:16px"><details><summary>Aplicaciones a comprobantes (${applications.length})</summary><p class="note">Detalle sin duplicar el total ejecutado. Los importes aplicados están en la moneda principal informada por cada empresa y no se suman entre sí.</p><div class="tblwrap"><table><thead><tr><th>Empresa</th><th>Tipo</th><th>Fecha</th><th>Cliente / proveedor</th><th>Cobranza / orden de pago</th><th>Documento aplicado</th><th>Importe aplicado</th></tr></thead><tbody>${applications.map(r=>`<tr><td>${esc(r.companyName)}</td><td>${r.type}</td><td>${fd(r.f)}</td><td>${esc(r.p||'–')}</td><td>${esc(r.doc||'–')}</td><td>${esc(r.appliedDoc||'–')}</td><td>${nf2.format(r.imp)}</td></tr>`).join('')}</tbody></table></div></details></div>`:''}<p class="note" style="margin-top:12px">«Actualizar vista» relee los datos guardados sin llamar a Finnegans. Para actualizar una fuente, abrí su empresa en el selector superior.</p>`;
+  bindConsolidatedPicker();$('#execMonth').onchange=e=>{S.execMonth=e.target.value;saveView();renderExecuted()};
+}
 function renderExecuted(){
+  const consolidated=consolidatedIds();if(consolidated.length>1){renderConsolidatedExecuted(consolidated);return}
   const v=$('#v-eje'),R=executedReport();
   if(!R.months.length){v.innerHTML=`<div class="card empty"><h2>Todavía no hay ejecutados cargados</h2><p>Cargá Cobros ejecutados y Pagos ejecutados en Datos y fuentes. Acá vas a ver los resultados, la evolución mensual y el análisis por categoría.</p><button class="btn pri" id="execGoDat">Ir a Datos y fuentes</button></div>`;$('#execGoDat').onclick=()=>setTab('dat');return}
   const monthName=m=>MES[+m.slice(5)-1]+' '+m.slice(0,4);
