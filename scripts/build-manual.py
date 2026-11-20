@@ -62,7 +62,7 @@ def page_frame(canvas, doc) -> None:
     canvas.line(46, 40, width - 46, 40)
     canvas.setFont("Arial", 8)
     canvas.setFillColor(GREY)
-    canvas.drawString(46, 27, "Manual de uso  ·  v1.0.33  ·  20/11/2026")
+    canvas.drawString(46, 27, "Manual de uso  ·  v1.0.34  ·  20/11/2026")
     canvas.drawRightString(width - 46, 27, f"Página {doc.page}")
     canvas.restoreState()
 

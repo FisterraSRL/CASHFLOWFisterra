@@ -29,10 +29,16 @@ test('one source builds an empty customer installation and keeps Fisterra data s
   assert.deepEqual(nubiral.data.cartera,[]);
   assert.equal(nubiral.data.tc,0);
   assert.doesNotMatch(nubiral.html,/<span class="company">FISTERRA<\/span>/);
+  assert.match(nubiral.html,/id="manualDialog"/);
+  assert.match(nubiral.html,/Manual de uso de Cashflow Nubiral/);
+  assert.doesNotMatch(nubiral.html,/cashflowfisterra\.vercel\.app/);
   const fisterra=build(null,'fisterra.html');
   assert.ok(fisterra.data.mov.length>0);
   assert.ok(fisterra.data.mov.length>nubiral.data.mov.length);
   assert.match(fisterra.html,/<span class="company">FISTERRA<\/span>/);
+  assert.match(fisterra.html,/id="manualDialog"/);
+  assert.match(fisterra.html,/Manual de uso de Cashflow Fisterra/);
+  assert.doesNotMatch(fisterra.html,/<!--MANUAL_CONTENT-->/);
   const protectedFisterra=build(null,'fisterra-auth.html',true);
   assert.deepEqual(protectedFisterra.data.mov,[]);
   assert.deepEqual(protectedFisterra.data.cartera,[]);

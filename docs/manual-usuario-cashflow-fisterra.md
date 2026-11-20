@@ -1,6 +1,6 @@
 # Manual de uso de Cashflow Fisterra
 
-**Versión de la aplicación:** 1.0.33
+**Versión de la aplicación:** 1.0.34
 
 **Fecha del manual:** 20 de noviembre de 2026
 

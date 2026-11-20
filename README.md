@@ -1,10 +1,11 @@
 # Cashflow Fisterra
 
-Versión **1.0.33**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
+Versión **1.0.34**, visible en el encabezado de la aplicación. Al publicar una nueva versión, actualizar la etiqueta `.app-version` de la plantilla y regenerar el HTML.
 
 App web de flujo de fondos que proyecta cobros y pagos a partir de los saldos exportados de Finnegans: clientes, proveedores, cheques propios y de terceros. Se complementa con plantillas para préstamos, leasing, planes de pago ARCA y presupuesto.
 
 Manual de uso: [PDF para compartir](output/pdf/manual-usuario-cashflow-fisterra.pdf) y [versión editable](docs/manual-usuario-cashflow-fisterra.md). Incluye las tareas del administrador y el uso diario de la aplicación.
+El ícono **Manual** del encabezado y de la pantalla de ingreso abre la misma guía como página HTML dentro de la aplicación.
 
 La evolución hacia una instalación comercial independiente por cliente está detallada en [docs/plan-comercializacion.md](docs/plan-comercializacion.md). La versión actual sigue siendo de desarrollo: la clave compartida, el respaldo y el aislamiento operativo deben evolucionar antes de usarla con clientes externos.
 

@@ -261,6 +261,21 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .empty .h2{margin-bottom:6px}
 .dev{display:inline-block;height:8px;border-radius:2px;vertical-align:middle}
 .prose{max-width:75ch;color:var(--ink2)} .prose li{margin-bottom:4px}
+.manual-trigger{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:#ffffffb8;color:var(--brand);font-weight:700;cursor:pointer}
+.manual-trigger:hover{background:var(--accent-soft)}.manual-trigger svg{width:19px;height:19px;flex:none}
+.manual-gate-action{margin:0 0 16px}
+#manualDialog{width:min(1080px,calc(100vw - 24px));height:min(88vh,900px);max-height:88vh;padding:0;border:1px solid var(--line);border-radius:18px;background:#f7f8fa;color:var(--ink);box-shadow:0 24px 70px #0a2f4460}
+#manualDialog[open]{display:flex;flex-direction:column}#manualDialog::backdrop{background:#0a2f44ae}
+.manual-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 22px;background:var(--fs-gradient-navy-solid);color:#fff}
+.manual-head h2{margin:0;font-size:18px}.manual-head button{background:#ffffff16;border:1px solid #ffffff80;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+.manual-layout{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:0;flex:1}
+.manual-toc{overflow-y:auto;padding:20px 12px 20px 20px;border-right:1px solid var(--line);background:#edf0f4}
+.manual-toc strong{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px}
+.manual-toc a{display:block;color:var(--brand);text-decoration:none;border-radius:7px;padding:7px 8px;font-size:12px}.manual-toc a:hover{background:#fff;text-decoration:underline}
+.manual-content{overflow-y:auto;padding:20px 30px 42px;font-size:14px;line-height:1.65;scroll-behavior:smooth}
+.manual-content h1{font-size:29px;line-height:1.15;color:var(--fs-red);margin:8px 0 19px}.manual-content h2{font-size:19px;color:var(--brand);margin:28px 0 9px;scroll-margin-top:12px}.manual-content h3{font-size:15px;color:var(--brand);margin:20px 0 7px}
+.manual-content p{margin:0 0 13px}.manual-content ul,.manual-content ol{padding-left:24px;margin:0 0 15px}.manual-content li{padding-left:3px;margin-bottom:7px}.manual-content code{background:#e5eaf0;border-radius:4px;padding:1px 4px;font-size:.9em}.manual-content a{color:var(--brand)}
+@media(max-width:700px){#manualDialog{height:94vh;max-height:94vh}.manual-layout{display:block;overflow-y:auto}.manual-toc{overflow:visible;border-right:0;border-bottom:1px solid var(--line);padding:12px 16px}.manual-toc a{display:inline-block;padding:5px 7px}.manual-content{overflow:visible;padding:18px}.manual-head{padding:12px 16px}.manual-head h2{font-size:15px}}
 @media (max-width:640px){.wrap{padding-inline:16px}.top{padding-block:20px 0}.brandbar{gap:10px;margin-bottom:24px}.app-pill{margin-left:-16px;padding-left:20px;padding-right:20px;font-size:10px}.brand-logo{width:142px}.company{order:3;font-size:10px;padding:5px 10px}.brand h1{font-size:30px}.brand .intro{font-size:12px}.brand .snapshot{font-size:10px;border-radius:10px}.kpi .v{font-size:24px}.params{position:static;padding:16px;gap:12px}.card{padding:16px}section.view{padding:12px;border-radius:20px}.srcs{grid-template-columns:minmax(0,1fr)}nav.tabs{padding-left:5px}nav.tabs button{padding:10px 12px;font-size:11px}main.wrap{padding-top:22px}.grid2{gap:12px}}
 @media(max-width:640px){tr.doc td:first-child{min-width:285px;max-width:320px}.doc .dw{flex-wrap:wrap}.doc .dd2{margin-left:19px}}
 @media (prefers-reduced-motion:no-preference){.drawer{animation:sl .18s ease-out}@keyframes sl{from{transform:translateX(30px);opacity:.6}}}
@@ -270,6 +285,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <div id="workspaceGate" role="region" aria-label="Acceso a los datos compartidos">
   <div class="workspace-gate-card">
     <h1>Cashflow</h1>
+    <button class="manual-trigger manual-gate-action" id="manualGateOpen" type="button" aria-label="Abrir manual de uso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-2.7-1.6-5.7-1.8-9-1v13c3.3-.8 6.3-.6 9 1 2.7-1.6 5.7-1.8 9-1v-13c-3.3-.8-6.3-.6-9 1Z"/><path d="M12 6.5v13"/></svg> Manual de uso</button>
     <p id="workspaceGateText">Cargando los datos guardados…</p>
     <form id="workspaceGateForm" hidden>
       <label for="workspaceKeyInput">Clave de acceso de esta instalación</label>
@@ -304,9 +320,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.33">v1.0.33</span>
+    <span class="app-version" aria-label="Versión 1.0.34">v1.0.34</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
+    <button class="manual-trigger" id="manualOpen" type="button" aria-label="Abrir manual de uso" title="Manual de uso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-2.7-1.6-5.7-1.8-9-1v13c3.3-.8 6.3-.6 9 1 2.7-1.6 5.7-1.8 9-1v-13c-3.3-.8-6.3-.6-9 1Z"/><path d="M12 6.5v13"/></svg><span>Manual</span></button>
     <div class="auth-userbar" id="authUserbar" hidden></div>
   </div>
   <div class="brand">
@@ -352,6 +369,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <section class="view" id="v-usr" hidden></section>
 </main>
 <div id="drawerHost"></div>
+<dialog id="manualDialog" aria-labelledby="manualDialogTitle"><div class="manual-head"><h2 id="manualDialogTitle">Manual de uso de Cashflow</h2><button id="manualClose" type="button">Cerrar</button></div><div class="manual-layout"><nav class="manual-toc" aria-label="Contenido del manual"><strong>Contenido</strong><!--MANUAL_TOC--></nav><article class="manual-content" id="manualContent"><!--MANUAL_CONTENT--></article></div></dialog>
 
 <script>
 const RAW = /*DATA*/;
@@ -1761,6 +1779,10 @@ $('#pAmounts').onchange=e=>{AMOUNT_UNIT=['ARS','ARS0','M'].includes(e.target.val
 $('#pChq').onchange=e=>{S.incChq=e.target.checked;save();renderAll()};
 document.querySelectorAll('#pGran button').forEach(b=>b.onclick=()=>{S.gran=b.dataset.g;save();renderAll()});
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+const manualDialog=$('#manualDialog');
+const openManual=()=>{if(!manualDialog.open)manualDialog.showModal();$('#manualClose').focus()};
+$('#manualOpen').onclick=openManual;$('#manualGateOpen').onclick=openManual;$('#manualClose').onclick=()=>manualDialog.close();
+manualDialog.querySelectorAll('[data-manual-target]').forEach(link=>link.onclick=e=>{e.preventDefault();document.getElementById(link.dataset.manualTarget)?.scrollIntoView({block:'start'})});
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='res')renderRes()},150)});
 // Repair previously imported API suppliers without discarding documents or scenarios.
 if(S.data.PRV.orig==='Finnegans · API')for(const r of S.data.PRV.rows){

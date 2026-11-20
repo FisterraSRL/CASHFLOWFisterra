@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs');
 const path=require('node:path');
+const {renderManualMarkdown}=require('./manual-html.cjs');
 
 const root=path.resolve(__dirname,'..');
 const read=relative=>fs.readFileSync(path.join(root,relative));
@@ -17,6 +18,12 @@ for(const name of ['Montserrat-Variable-400-700.woff2','Montserrat-Variable-Ital
   replaceOnce(`brand/fonts/${name}`,`data:font/woff2;base64,${read(`app/brand/fonts/${name}`).toString('base64')}`);
 }
 replaceOnce('<!--FISTERRA_LOGO-->',read('app/brand/logo/fisterra-lockup-horizontal.svg').toString('utf8'));
+let manual=read('docs/manual-usuario-cashflow-fisterra.md').toString('utf8');
+if(installation)manual=manual.replaceAll('Cashflow Fisterra',`Cashflow ${installation}`).replace('**Acceso:** https://cashflowfisterra.vercel.app/','**Acceso:** la URL de esta instalación').replace('Abrí la URL de Fisterra','Abrí la URL de tu instalación');
+manual=manual.replace(/(\*\*Versión de la aplicación:\*\* )\d+\.\d+\.\d+/,`$1${JSON.parse(read('package.json')).version}`);
+const manualPage=renderManualMarkdown(manual);
+replaceOnce('<!--MANUAL_CONTENT-->',manualPage.html);
+replaceOnce('<!--MANUAL_TOC-->',manualPage.toc);
 
 // Every named customer starts without Fisterra's demonstration movements.
 const data=installation||process.env.CASHFLOW_AUTH_MODE==='users'?{ref:'2000-01-01',tc:0,mov:[],cartera:[]}:JSON.parse(read('data/sample/data.json').toString('utf8'));
