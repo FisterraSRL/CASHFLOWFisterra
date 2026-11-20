@@ -61,11 +61,11 @@ test('Finnegans query uses the selected company and returns only its rows',async
   assert.equal(result.body.rows.length,1);assert.equal(result.body.rows[0].company,own.name);
   assert.equal(result.body.diagnostics.responseBody,'[OCULTO: EL REPORTE INCLUYE OTRAS EMPRESAS]');
 });
-test('consolidated flow reads only assigned companies and never exposes report credentials',async()=>{
+test('consolidated views read assigned companies, including executed reports, without exposing credentials',async()=>{
   const second={id:'a0000000-0000-4000-8000-000000000003',code:'EMPRE03',name:'SEGUNDA EMPRESA'};
   const read=[];
   accessible=[own,second];
-  readWorkspace=async id=>{read.push(id);return {payload:{state:{ref:'2026-11-19',tc:1000,data:{CLI:{rows:[{company:id===own.id?own.name:second.name,m:100,c:'ARS',cat:'Cobranza clientes',f:'2026-11-20'}]}}},filters:{CLI:{cuenta:'PRIVATE'}}},updatedAt:'2026-11-19T10:00:00Z'}};
+  readWorkspace=async id=>{read.push(id);return {payload:{state:{ref:'2026-11-19',tc:1000,data:{CLI:{rows:[{company:id===own.id?own.name:second.name,m:100,c:'ARS',cat:'Cobranza clientes',f:'2026-11-20'}]},EJC:{rows:[{imp:120,mes:'2026-11',originalCurrency:'ARS'}],period:{from:'2026-11-01',to:'2026-11-19'},applications:[{imp:50,mes:'2026-11'}]},EJP:{rows:[{imp:70,mes:'2026-11',originalCurrency:'ARS'}],period:{from:'2026-11-01',to:'2026-11-19'}}}},filters:{CLI:{cuenta:'PRIVATE'}}},updatedAt:'2026-11-19T10:00:00Z'}};
   try{
     assert.equal((await call(consolidatedHandler,'POST',{companyIds:[own.id,other.id]})).statusCode,403);
     assert.deepEqual(read,[]);
@@ -73,6 +73,9 @@ test('consolidated flow reads only assigned companies and never exposes report c
     assert.equal(result.statusCode,200);assert.deepEqual(read,[own.id,second.id]);
     assert.equal(result.body.workspaces.length,2);
     assert.equal(result.body.workspaces[1].state.data.CLI.rows[0].company,second.name);
+    assert.equal(result.body.workspaces[1].state.data.EJC.rows[0].imp,120);
+    assert.equal(result.body.workspaces[1].state.data.EJC.applications[0].imp,50);
+    assert.equal(result.body.workspaces[1].state.data.EJP.rows[0].imp,70);
     assert.equal(JSON.stringify(result.body).includes('PRIVATE'),false);
     assert.equal((await call(consolidatedHandler,'POST',{companyIds:[own.id,own.id]})).statusCode,400);
   }finally{accessible=[own]}

@@ -26,7 +26,7 @@ module.exports=async function handler(req,res){
       return {company:allowed.get(id),updatedAt,state:state?{
         ref:state.ref,tc:state.tc,fx:state.fx,saldo:state.saldo,saldoFecha:state.saldoFecha,saldoManualSet:state.saldoManualSet,
         incChq:state.incChq,excl:state.excl,ovr:state.ovr,inc:state.inc,
-        data:Object.fromEntries(['BCO','CLI','PRV','CHP','CHT','PRE','LEA','ARCA'].map(source=>[source,state.data?.[source]||{rows:[]}]))
+        data:Object.fromEntries(['BCO','CLI','PRV','CHP','CHT','PRE','LEA','ARCA','EJC','EJP'].map(source=>[source,state.data?.[source]||{rows:[]}]))
       }:null};
     }));
     const result={workspaces};
