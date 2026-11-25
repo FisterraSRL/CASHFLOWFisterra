@@ -219,6 +219,12 @@ th.atr,td.atr{background:var(--out-soft)}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:41;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .drawer header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .drawer .body{overflow:auto;padding:4px 16px 16px}
+.drawer-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
+.drawer-options select{width:100%;font-size:12px}
+.drawer-group{margin-top:10px}
+.drawer-group h3{margin:0;padding:7px 9px;background:var(--accent-soft);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+.drawer-group h3 span{font-weight:500;color:var(--ink2)}
+.calendar-month-detail{margin:8px 0}
 .btn{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600;font-size:12px}
 .btn.pri{background:var(--fs-red-deep);color:#fff;border-color:var(--fs-red-deep)}
 .btn.pri:hover{background:var(--fs-red-deep);border-color:var(--fs-red-deep)}
@@ -320,7 +326,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.34">v1.0.34</span>
+    <span class="app-version" aria-label="Versión 1.0.35">v1.0.35</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><!--FISTERRA_LOGO--></div>
     <button class="manual-trigger" id="manualOpen" type="button" aria-label="Abrir manual de uso" title="Manual de uso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-2.7-1.6-5.7-1.8-9-1v13c3.3-.8 6.3-.6 9 1 2.7-1.6 5.7-1.8 9-1v-13c-3.3-.8-6.3-.6-9 1Z"/><path d="M12 6.5v13"/></svg><span>Manual</span></button>
@@ -707,14 +713,42 @@ function renderConsolidatedFlu(ids){
 
 /* ---------- drawer ---------- */
 let DR=null;
-function openDrawer(title,items,sub){
-  DR={title,sub,ids:new Set(items.map(r=>r.id))};
+const dueDetailView={sort:'date',group:'none'};
+const organizationName=row=>String(row.p||'').trim()||'Sin organización';
+const byDueDate=(a,b)=>a.f.localeCompare(b.f);
+const byOrganization=(a,b)=>organizationName(a).localeCompare(organizationName(b),'es',{sensitivity:'base',numeric:true});
+function dueDetailControls(){
+  return `<div class="drawer-options"><div class="fld"><label for="dueDetailSort">Ordenar por</label><select id="dueDetailSort"><option value="date">Fecha de vencimiento</option><option value="org">Organización (A a Z)</option><option value="amount">Importe (menor a mayor)</option></select></div><div class="fld"><label for="dueDetailGroup">Agrupar por</label><select id="dueDetailGroup"><option value="none">Sin agrupar</option><option value="date">Fecha de vencimiento</option><option value="org">Organización</option></select></div></div>`;
+}
+function bindDueDetail(items,rowHTML,amount){
+  const body=$('#drawerHost .body'),sort=$('#dueDetailSort'),group=$('#dueDetailGroup');
+  sort.value=dueDetailView.sort;group.value=dueDetailView.group;
+  const byAmount=(a,b)=>amount(a)-amount(b);
+  const render=()=>{
+    const compare={date:byDueDate,org:byOrganization,amount:byAmount}[sort.value];
+    const sorted=[...items].sort((a,b)=>compare(a,b)||byDueDate(a,b)||byAmount(a,b));
+    const groups=new Map();
+    if(group.value!=='none')for(const row of sorted){
+      const key=group.value==='date'?row.f:organizationName(row);
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(row);
+    }
+    body.innerHTML=!sorted.length?'<p class="note">Sin movimientos.</p>':groups.size?[...groups]
+      .sort((a,b)=>a[0].localeCompare(b[0],'es',{sensitivity:'base',numeric:true}))
+      .map(([key,rows])=>`<section class="drawer-group"><h3>${esc(group.value==='date'?fd(key):key)} <span>· ${rows.length} ${rows.length===1?'movimiento':'movimientos'} · ${$f2(rows.reduce((sum,row)=>sum+amount(row),0))} neto</span></h3>${rows.map(rowHTML).join('')}</section>`).join(''):sorted.map(rowHTML).join('');
+  };
+  sort.onchange=group.onchange=()=>{dueDetailView.sort=sort.value;dueDetailView.group=group.value;render();body.scrollTop=0};
+  render();
+}
+function openDrawer(title,items,sub,options={}){
+  const {dueDetail=false}=options;
+  DR={title,sub,ids:new Set(items.map(r=>r.id)),options};
   items=[...items].sort((a,b)=>a.f<b.f?-1:a.f>b.f?1:ars(a)-ars(b));
   const tot=items.reduce((a,r)=>a+ars(r),0);
   const html=`<div class="scrim" data-x></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}">
   <header><div><div class="h2">${esc(title)}</div><div class="note">Solo podés reprogramar ítems con AsientoItemID de Finnegans.</div><div class="note">${esc(sub||'')} ${items.length} movimientos · total <b class="${tot<0?'neg':'pos'}">${$f2(tot)}</b></div></div><button class="btn" data-x>Cerrar</button></header>
-  <div class="body">${items.map(liHTML).join('')||'<p class="note">Sin movimientos.</p>'}</div></aside>`;
-  $('#drawerHost').innerHTML=html;$('#drawerHost [data-x].btn').focus();
+  ${dueDetail?dueDetailControls():''}<div class="body">${dueDetail?'':items.map(liHTML).join('')||'<p class="note">Sin movimientos.</p>'}</div></aside>`;
+  $('#drawerHost').innerHTML=html;if(dueDetail)bindDueDetail(items,liHTML,ars);$('#drawerHost [data-x].btn').focus();
   $('#drawerHost').querySelectorAll('[data-x]').forEach(e=>e.onclick=closeDrawer)}
 function closeDrawer(){DR=null;$('#drawerHost').innerHTML=''}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
@@ -727,7 +761,7 @@ function recordDateChange(raw,f){if(!canMoveDate(raw))return;S.dateChanges=S.dat
   S.dateChanges[key]={source:raw.s,asientoItemId:raw.asientoItemId,transaccionId:raw.transaccionId??null,company:raw.company||'',organization:raw.p||'',document:raw.comprobante||raw.doc||'',originalDate:raw.f,date,changedAt:new Date().toISOString(),...(lastSentDate?{lastSentDate}:{}),status:lastSentDate===date?'sent':'pending',...(lastSentDate===date&&previous?.sentAt?{sentAt:previous.sentAt}:{})}}
 function ensureDateChanges(){S.dateChanges=S.dateChanges||{};for(const[id,f]of Object.entries(S.ovr||{})){const raw=rawOf(id);if(canMoveDate(raw)&&f&&f!==raw.f&&!S.dateChanges[dateChangeKey(raw)])recordDateChange(raw,f)}}
 function setDate(id,f){const raw=rawOf(id);if(!canMoveDate(raw))return;S.ovr=S.ovr||{};if(f&&raw.f!==f)S.ovr[id]=f;else delete S.ovr[id];recordDateChange(raw,f);save();const d=DR;renderAll();
-  if(d){const it=allMovs().filter(r=>d.ids.has(r.id));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
+  if(d){const it=allMovs().filter(r=>d.ids.has(r.id)&&(!d.options.month||r.f.startsWith(d.options.month+'-')));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub,d.options);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('dch2'))setDate(t.dataset.id,t.value||null)});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
 function liHTML(r){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportToday();
@@ -952,10 +986,20 @@ function consolidatedItemHTML(r){
   const number=flowDocNumber({...r,s:r.originalSource||r.s});
   return `<div class="li"><div class="p" title="${esc(r.p||'')}">${esc(r.p||'Sin organización')}</div><div class="m ${r.m<0?'neg':'pos'}">${$f2(r.m)}</div><div class="dd"><span>${fd(r.f)}</span><span>${esc(number)}</span><span class="chip">${esc(r.company)}</span><span class="chip">${esc(r.cat)}</span>${r.originalCurrency&&r.originalCurrency!=='ARS'?`<span class="chip">${esc(r.originalCurrency)} ${nf2.format(r.originalAmount)}</span>`:''}</div></div>`;
 }
-function openConsolidatedDrawer(f,items){
-  const sorted=[...items].sort((a,b)=>a.m-b.m),total=sorted.reduce((sum,r)=>sum+r.m,0);
-  $('#drawerHost').innerHTML=`<div class="scrim" data-x></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="Vencimientos consolidados del ${fd(f)}"><header><div><div class="h2">Vencimientos del ${fd(f)}</div><div class="note">${sorted.length} movimientos de las empresas seleccionadas · total <b class="${total<0?'neg':'pos'}">${$f2(total)}</b></div><div class="note">Vista de solo lectura. Para cambiar una fecha, abrí la empresa del documento.</div></div><button class="btn" data-x>Cerrar</button></header><div class="body">${sorted.map(consolidatedItemHTML).join('')||'<p class="note">Sin movimientos.</p>'}</div></aside>`;
+function openConsolidatedDrawer(title,items){
+  DR=null;
+  const total=items.reduce((sum,r)=>sum+r.m,0);
+  $('#drawerHost').innerHTML=`<div class="scrim" data-x></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><div><div class="h2">${esc(title)}</div><div class="note">${items.length} movimientos de las empresas seleccionadas · total <b class="${total<0?'neg':'pos'}">${$f2(total)}</b></div><div class="note">Vista de solo lectura. Para cambiar una fecha, abrí la empresa del documento.</div></div><button class="btn" data-x>Cerrar</button></header>${dueDetailControls()}<div class="body"></div></aside>`;
+  bindDueDetail(items,consolidatedItemHTML,row=>row.m);
   $('#drawerHost').querySelectorAll('[data-x]').forEach(e=>e.onclick=closeDrawer);$('#drawerHost [data-x].btn').focus();
+}
+function bindMonthDueDetail(view,month,items,open){
+  const calendar=view.querySelector('.cal');
+  const button=document.createElement('button');
+  button.type='button';button.className='btn calendar-month-detail';button.textContent='Ver vencimientos del mes';
+  const monthKey=S.calM,monthItems=items.filter(row=>row.f.slice(0,7)===monthKey);
+  button.onclick=()=>open(`Vencimientos · ${month}`,monthItems,monthKey);
+  calendar.before(button);
 }
 function renderConsolidatedVen(ids){
   const v=$('#v-ven'),key=ids.join('|'),today=reportToday();if(!S.calM)S.calM=today.slice(0,7);
@@ -980,7 +1024,8 @@ function renderConsolidatedVen(ids){
   v.querySelectorAll('#cF button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===S.calF);b.onclick=()=>{S.calF=b.dataset.v;saveView();renderVen()}});
   const move=n=>{S.calM=iso(new Date(Date.UTC(yy,mm-1+n,1))).slice(0,7);renderVen()};
   $('#cPrev').onclick=()=>move(-1);$('#cNext').onclick=()=>move(1);$('#cHoy').onclick=()=>{S.calM=reportToday().slice(0,7);renderVen()};
-  v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openConsolidatedDrawer(b.dataset.f,byDay[b.dataset.f]||[]));
+  v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openConsolidatedDrawer('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[]));
+  if(!blocked)bindMonthDueDetail(v,month,all,openConsolidatedDrawer);
 }
 function renderVen(){
   const consolidated=consolidatedIds();if(consolidated.length>1){renderConsolidatedVen(consolidated);return}
@@ -1012,7 +1057,10 @@ function renderVen(){
   v.querySelectorAll('#cF button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.v===S.calF);b.onclick=()=>{S.calF=b.dataset.v;saveView();renderVen()}});
   const mv=n=>{const d=new Date(Date.UTC(yy,mm-1+n,1));S.calM=iso(d).slice(0,7);renderVen()};
   $('#cPrev').onclick=()=>mv(-1);$('#cNext').onclick=()=>mv(1);$('#cHoy').onclick=()=>{S.calM=reportToday().slice(0,7);renderVen()};
-  v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>openDrawer('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[],''))}
+  const open=(title,items,month)=>openDrawer(title,items,'',{dueDetail:true,month});
+  v.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>open('Vencimientos del '+fd(b.dataset.f),byDay[b.dataset.f]||[]));
+  bindMonthDueDetail(v,mN,all,open);
+}
 
 /* ---------- PRESUPUESTO ---------- */
 function executedPeriod(source,state=S){

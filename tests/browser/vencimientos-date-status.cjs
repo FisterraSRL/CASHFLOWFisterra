@@ -42,6 +42,21 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     await page.locator('#drawerHost [data-x].btn').click();
     await page.locator('#cHoy').click();
     assert.equal(await page.locator(`#v-ven [data-f="${dates.today}"]`).evaluate(el=>el.classList.contains('today')),true);
+    await page.evaluate(()=>{
+      const row=S.data.CLI.rows[0];S.calM='2026-11';
+      S.data.CHT.rows=[];
+      S.data.CLI.rows=[{...row,id:'CLI-z',p:'Zeta',f:'2026-11-01'},{...row,id:'CLI-a2',p:'Alfa',f:'2026-11-02'},{...row,id:'CLI-a3',p:'Alfa',f:'2026-11-03'},{...row,id:'CLI-next',p:'Otro mes',f:'2026-12-01'}];
+      renderVen();
+    });
+    await page.getByRole('button',{name:'Ver vencimientos del mes'}).click();
+    const drawer=page.locator('#drawerHost');
+    assert.deepEqual(await drawer.locator('.li .p').allTextContents(),['Zeta','Alfa','Alfa']);
+    await drawer.getByLabel('Ordenar por').selectOption('org');
+    assert.deepEqual(await drawer.locator('.li .p').allTextContents(),['Alfa','Alfa','Zeta']);
+    await drawer.getByLabel('Agrupar por').selectOption('org');
+    assert.match(await drawer.locator('.drawer-group h3').first().innerText(),/Alfa.*2 movimientos/);
+    await drawer.getByLabel('Agrupar por').selectOption('date');
+    assert.deepEqual((await drawer.locator('.drawer-group h3').allTextContents()).map(text=>text.slice(0,10)),['01/11/2026','02/11/2026','03/11/2026']);
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({futureChequeNotOverdue:true,pastChequeOverdue:true,todayUsesActualDate:true,noPageErrors:true}));
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
