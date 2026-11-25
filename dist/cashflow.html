@@ -282,6 +282,10 @@ th.atr,td.atr{background:var(--out-soft)}
 .drawer .body{overflow:auto;padding:4px 16px 16px}
 .drawer-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
 .drawer-options select{width:100%;font-size:12px}
+.drawer-doc-actions{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);flex-shrink:0}
+.drawer-doc-actions .btn:disabled{opacity:.55;cursor:default}
+.drawer .p .doc-select{margin-inline-end:6px}
+#documentExclusionActions[hidden]{display:none}
 .drawer-group{margin-top:10px}
 .drawer-group h3{margin:0;padding:7px 9px;background:var(--accent-soft);border-radius:6px;font-size:12px;overflow-wrap:anywhere}
 .drawer-group h3 span{font-weight:500;color:var(--ink2)}
@@ -387,7 +391,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.36">v1.0.36</span>
+    <span class="app-version" aria-label="Versión 1.0.37">v1.0.37</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -436,6 +440,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <button role="tab" data-t="dat">Datos y fuentes</button>
   <button role="tab" data-t="usr" id="authUsersTab" hidden>Usuarios</button>
 </nav>
+<div id="documentExclusionActions" class="flow-bulk" hidden><button type="button" class="btn" id="openExcludedDocuments">Documentos excluidos</button></div>
 
 <section class="view" id="v-res"></section>
 <section class="view" id="v-flu" hidden></section>
@@ -455,7 +460,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <a href="#manual-section-7" data-manual-target="manual-section-7">7. Datos y fuentes</a>
 <a href="#manual-section-8" data-manual-target="manual-section-8">8. Rutina recomendada y problemas frecuentes</a>
 <a href="#manual-section-9" data-manual-target="manual-section-9">9. Preguntas frecuentes</a></nav><article class="manual-content" id="manualContent"><h1>Manual de uso de Cashflow Fisterra</h1>
-<p><strong>Versión de la aplicación:</strong> 1.0.36</p>
+<p><strong>Versión de la aplicación:</strong> 1.0.37</p>
 <p><strong>Fecha del manual:</strong> 20 de noviembre de 2026</p>
 <p><strong>Acceso:</strong> <a href="https://cashflowfisterra.vercel.app/" target="_blank" rel="noopener noreferrer">https://cashflowfisterra.vercel.app/</a></p>
 <p>Este manual explica el uso diario de Cashflow Fisterra y las tareas del usuario administrador. La aplicación guarda datos y parámetros por empresa. Las consultas a Finnegans se ejecutan cuando el usuario las solicita.</p>
@@ -515,6 +520,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <p>Presenta ingresos, egresos y saldos por período. Desplegá una categoría para ver organizaciones y luego comprobantes. En facturas se muestra <strong>Comprobante</strong>; en cheques, el número de cheque. Podés excluir organizaciones para simular escenarios y seleccionar cobros para marcarlos como <strong>incobrables</strong>. Los incobrables dejan de sumar a los ingresos proyectados.</p>
 <p>Solo los documentos de Clientes y Proveedores que tengan <code>AsientoItemID</code> permiten modificar la fecha. Los cheques y los documentos sin ese identificador muestran la fecha sin editor. Una modificación queda guardada como cambio pendiente; no se envía a Finnegans automáticamente.</p>
 <h3>Vencimientos</h3>
+<p>Para excluir documentos, marcalos en el detalle de <strong>Flujo de fondos</strong> o <strong>Vencimientos</strong> y pulsá <strong>Excluir seleccionados</strong>. Se retiran de ambas vistas. Desde <strong>Documentos excluidos</strong> podés revisar el listado y pulsar <strong>Reincorporar</strong>. Las exclusiones se guardan por empresa y se reflejan en el consolidado.</p>
 <p>El calendario muestra cobros y pagos por día; al elegir un día se abre el detalle. La agenda muestra los próximos 14 días. Podés filtrar por <strong>Todo</strong>, <strong>Cobros</strong> o <strong>Pagos</strong>. La edición de fecha sigue la misma regla de <code>AsientoItemID</code> que el flujo.</p>
 <h3>Ejecutado</h3>
 <p>Reúne <strong>Cobros ejecutados</strong> y <strong>Pagos ejecutados</strong> ya registrados. Podés elegir un mes o todos los meses y ver totales, neto, cobertura, evolución mensual, categorías, cuentas y registros. Las aplicaciones a facturas aparecen como detalle y no vuelven a sumarse. Si falta una fuente o los períodos consultados no coinciden, el neto y la cobertura se muestran como <strong>Sin datos</strong>.</p>
@@ -614,7 +620,7 @@ function save(){let localSaved=true;if(WORKSPACE.mode!=='ready')try{localStorage
 function saveView(){if(WORKSPACE.mode==='local')save()}
 function workspaceHeaders(){return WORKSPACE.key?{'x-cashflow-key':WORKSPACE.key}:{}}
 function workspacePayload(){
-  const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','ovr','inc','data','dateChanges'];
+  const keys=['ref','tc','fx','saldo','saldoFecha','saldoManualSet','hor','gran','incChq','bal','excl','excludedDocuments','ovr','inc','data','dateChanges'];
   const state=Object.fromEntries(keys.filter(k=>S[k]!==undefined).map(k=>[k,S[k]]));
   const filters=Object.fromEntries(Object.entries(REPORT_FIELDS).map(([k,fields])=>[k,Object.fromEntries(fields.map(([field])=>[field,REPORT_STATE[k].filters[field]||'']))]));
   return {version:1,state,filters,...(AUTH.mode!=='users'&&WORKSPACE.vault?{vault:WORKSPACE.vault}:{})};
@@ -696,9 +702,9 @@ async function loadWorkspace(){
     if(!response.ok)throw new Error(result.error||'No se pudieron cargar los datos compartidos.');
     if(result.mode==='local'){WORKSPACE.mode='local';finishWorkspace();return}
     WORKSPACE.revision=result.revision;WORKSPACE.updatedAt=result.updatedAt;
-    if(!result.payload){if(AUTH.mode==='users'){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.saldo=0;S.ref=reportToday();S.bal={};return initializeWorkspace(false)}showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
+    if(!result.payload){if(AUTH.mode==='users'){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.excludedDocuments=[];S.saldo=0;S.ref=reportToday();S.bal={};return initializeWorkspace(false)}showWorkspaceGate('La conexión está lista. Falta elegir los datos iniciales.','first');return}
     if(result.payload.version!==1||!result.payload.state?.data)throw new Error('El formato de los datos guardados no es compatible con esta versión.');
-    Object.assign(S,result.payload.state);
+    Object.assign(S,{excludedDocuments:[]},result.payload.state);
     for(const [k,value]of Object.entries(freshData()))if(!S.data[k])S.data[k]=value;
     if(!S.fx||typeof S.fx!=='object'||Array.isArray(S.fx))S.fx={};
     if(!S.dateChanges||typeof S.dateChanges!=='object'||Array.isArray(S.dateChanges))S.dateChanges={};
@@ -709,7 +715,7 @@ async function loadWorkspace(){
 }
 async function initializeWorkspace(empty){
   const previous=empty?JSON.stringify(S):null;
-  if(empty){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.saldo=0;S.saldoManualSet=false;S.saldoFecha=null;S.ref=reportToday();S.bal={}}
+  if(empty){S.data=emptyData();S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.excludedDocuments=[];S.saldo=0;S.saldoManualSet=false;S.saldoFecha=null;S.ref=reportToday();S.bal={}}
   $('#workspaceImport').disabled=$('#workspaceEmpty').disabled=true;
   $('#workspaceGateText').textContent='Guardando los datos iniciales…';
   try{
@@ -772,6 +778,22 @@ function chtFlow(r){
   if(r.e==='Cheque Depositado'&&/depositar/i.test(r.x)&&r.f>=S.ref)return Object.assign({},r,{cat:'Cheques depositados'});
   return null}
 function ensureIds(){for(const[k,d]of Object.entries(S.data))(d.rows||[]).forEach((r,i)=>{if(r.id==null)r.id=k+'-'+i})}
+function documentKey(row){
+  if(canMoveDate(row))return JSON.stringify([row.s,String(row.asientoItemId)]);
+  return JSON.stringify([row.s,row.company||'',row.account||'',row.p||'',row.doc||row.comprobante||'',row.chequeNumber||'',row.fo0||row.f,row.c||'ARS',row.fc||'']);
+}
+function excludedDocuments(state=S){return Array.isArray(state.excludedDocuments)?state.excludedDocuments:[]}
+function excludeDocuments(rows){
+  const saved=new Map(excludedDocuments().map(entry=>[entry.key,entry]));
+  for(const row of rows){
+    const key=documentKey(row);
+    saved.set(key,{key,document:flowDocNumber(row),organization:row.p||'',company:row.company||AUTH.company?.name||'',category:row.cat||'',date:row.f,amount:row.m,currency:row.c||'ARS'});
+  }
+  S.excludedDocuments=[...saved.values()];
+  CONS.key='';
+  save();
+  renderAll();
+}
 function ov(r){const n=S.ovr&&S.ovr[r.id],inc=S.inc&&S.inc[r.id];if(!(n&&n!==r.f)&&!inc)return r;const o=Object.assign({},r);if(n&&n!==r.f){o.f=n;o.fo0=r.f}if(inc)o.inc=true;return o}
 function clearOvr(k){for(const m of [S.ovr,S.inc])if(m)for(const id of Object.keys(m))if(id.startsWith(k+'-'))delete m[id]}
 function restorePendingDates(k,rows){S.ovr=S.ovr||{};for(const r of rows)if(canMoveDate(r)&&r.s===k){const pending=S.dateChanges?.[dateChangeKey(r)];if(pending&&pending.date!==r.f)S.ovr[r.id]=pending.date}}
@@ -781,7 +803,8 @@ function allMovs(){ensureIds();
   out.push(...prvSplit().flow.map(ov));
   for(const r of d.CHT.rows){const f=chtFlow(ov(r));if(f)out.push(f)}
   const companies=new Map();for(const r of out){const key=r.cat+'|'+r.p;if(!companies.has(key))companies.set(key,new Set());companies.get(key).add(r.company||'')}
-  return out.map(r=>({...r,orgLabel:companies.get(r.cat+'|'+r.p).size>1?r.p+' · '+(r.company||'Sin empresa'):r.p}))}
+  const excluded=new Set(excludedDocuments().map(entry=>entry.key));
+  return out.filter(r=>!excluded.has(documentKey(r))).map(r=>({...r,orgLabel:companies.get(r.cat+'|'+r.p).size>1?r.p+' · '+(r.company||'Sin empresa'):r.p}))}
 function prvSplit(){const g={};for(const r of S.data.PRV.rows){const k=r.cat+'|'+(r.company||'')+'|'+r.p;(g[k]||(g[k]={t:0,L:[]}));g[k].t+=ars(r);g[k].L.push(r)}
   const flow=[],fav=[];for(const o of Object.values(g))(o.t>0?fav:flow).push(...o.L);return{flow,fav}}
 const chpPend=r=>r.s==='CHP'&&!r.conciliado&&r.f<S.ref; // cheques emitidos vencidos sin conciliar
@@ -847,7 +870,8 @@ function consolidatedCompanyFlow(workspace,cols){
   for(const list of providerGroups.values())if(list.reduce((sum,r)=>sum+amount(r),0)<=0)raw.push(...list);
   for(const r of source.CHT?.rows||[])if(!r.conciliado&&(r.e==='En Cartera'||r.e==='Cheque Depositado'&&/depositar/i.test(r.x||'')&&(state.ovr?.[r.id]||r.f)>=S.ref))raw.push({...r,cat:r.e==='En Cartera'?'Cheques en cartera':'Cheques depositados'});
   const excluded=new Set(state.excl||[]);
-  const movements=raw.map(r=>({...r,f:state.ovr?.[r.id]||r.f})).filter(r=>
+  const excludedKeys=new Set(excludedDocuments(state).map(entry=>entry.key));
+  const movements=raw.filter(r=>!excludedKeys.has(documentKey(r))).map(r=>({...r,f:state.ovr?.[r.id]||r.f})).filter(r=>
     (S.incChq||!(r.s==='CHP'&&r.f<S.ref))&&!state.inc?.[r.id]&&!excluded.has(r.cat+'|'+r.p)&&!excluded.has(r.cat+'|'+r.p+' · '+(r.company||'')));
   const needed=[...movements,...providers,...(source.BCO?.at===S.ref?source.BCO.rows||[]:[])].map(r=>r.c||'ARS');
   const missing=[...new Set(needed.filter(c=>!(rate(c)>0)))];
@@ -940,15 +964,47 @@ function bindDueDetail(items,rowHTML,amount){
 }
 function openDrawer(title,items,sub,options={}){
   const {dueDetail=false}=options;
+  const selectable=dueDetail||S.tab==='flu';
   DR={title,sub,ids:new Set(items.map(r=>r.id)),options};
   items=[...items].sort((a,b)=>a.f<b.f?-1:a.f>b.f?1:ars(a)-ars(b));
+  const renderRow=row=>liHTML(row,selectable);
   const tot=items.reduce((a,r)=>a+ars(r),0);
   const html=`<div class="scrim" data-x></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}">
   <header><div><div class="h2">${esc(title)}</div><div class="note">Solo podés reprogramar ítems con AsientoItemID de Finnegans.</div><div class="note">${esc(sub||'')} ${items.length} movimientos · total <b class="${tot<0?'neg':'pos'}">${$f2(tot)}</b></div></div><button class="btn" data-x>Cerrar</button></header>
-  ${dueDetail?dueDetailControls():''}<div class="body">${dueDetail?'':items.map(liHTML).join('')||'<p class="note">Sin movimientos.</p>'}</div></aside>`;
-  $('#drawerHost').innerHTML=html;if(dueDetail)bindDueDetail(items,liHTML,ars);$('#drawerHost [data-x].btn').focus();
+  ${dueDetail?dueDetailControls():''}${selectable&&items.length?'<div class="drawer-doc-actions"><button class="btn" type="button" id="drawerExcludeDocs" disabled>Excluir seleccionados</button><span class="note" id="drawerDocCount" aria-live="polite">0 seleccionados</span></div>':''}<div class="body">${dueDetail?'':items.map(renderRow).join('')||'<p class="note">Sin movimientos.</p>'}</div></aside>`;
+  const host=$('#drawerHost');host.innerHTML=html;
+  const selected=new Set();
+  const update=()=>{const button=$('#drawerExcludeDocs');if(button){button.disabled=!selected.size;$('#drawerDocCount').textContent=`${selected.size} seleccionados`}};
+  if(dueDetail)bindDueDetail(items,row=>liHTML(row,selectable,selected),ars);
+  if(selectable&&items.length){
+    host.querySelector('.body').onchange=e=>{const id=e.target.dataset.excludeSelect;if(id===undefined)return;if(e.target.checked)selected.add(id);else selected.delete(id);update()};
+    $('#drawerExcludeDocs').onclick=()=>{
+      const rows=items.filter(row=>selected.has(row.id));
+      closeDrawer();excludeDocuments(rows);$('#openExcludedDocuments').focus();
+    };
+  }
+  $('#drawerHost [data-x].btn').focus();
   $('#drawerHost').querySelectorAll('[data-x]').forEach(e=>e.onclick=closeDrawer)}
 function closeDrawer(){DR=null;$('#drawerHost').innerHTML=''}
+function openExcludedDocuments(){
+  DR=null;
+  const current=excludedDocuments().map(entry=>({...entry,editable:true}));
+  const others=consolidatedIds().length>1?(CONS.workspaces||[])
+    .filter(w=>w.company.id!==AUTH.company?.id)
+    .flatMap(w=>excludedDocuments(w.state||{}).map(entry=>({...entry,company:w.company.name,editable:false}))):[];
+  const entries=[...current,...others].sort((a,b)=>a.date.localeCompare(b.date)||a.organization.localeCompare(b.organization,'es'));
+  const host=$('#drawerHost');
+  host.innerHTML=`<div class="scrim" data-x></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="Documentos excluidos"><header><div><div class="h2">Documentos excluidos</div><div class="note">Reincorporá documentos al flujo y al calendario desde acá.</div>${others.length?'<div class="note">Para editar exclusiones de otra empresa, seleccionala arriba.</div>':''}</div><button class="btn" data-x>Cerrar</button></header><div class="body">${entries.length?entries.map((entry,index)=>`<div class="li"><div class="p">${esc(entry.organization||'Sin organización')} · ${esc(entry.document)}</div><div class="m">${esc(entry.currency)} ${nf2.format(entry.amount)}</div><div class="dd"><span>${fd(entry.date)}</span>${entry.company?`<span class="chip">${esc(entry.company)}</span>`:''}<span>${esc(entry.category)}</span>${entry.editable?`<button class="btn" type="button" data-restore-doc="${index}" aria-label="Reincorporar ${esc(entry.document)}">Reincorporar</button>`:''}</div></div>`).join(''):'<p class="note">No hay documentos excluidos.</p>'}</div></aside>`;
+  host.querySelectorAll('[data-x]').forEach(el=>el.onclick=closeDrawer);
+  host.querySelectorAll('[data-restore-doc]').forEach(button=>button.onclick=()=>{
+    const entry=entries[Number(button.dataset.restoreDoc)];
+    S.excludedDocuments=excludedDocuments().filter(row=>row.key!==entry.key);
+    if(CONS.workspaces){const current=CONS.workspaces.find(w=>w.company.id===AUTH.company?.id);if(current?.state)current.state.excludedDocuments=S.excludedDocuments}
+    save();renderAll();openExcludedDocuments();
+  });
+  host.querySelector('.btn[data-x]').focus();
+}
+$('#openExcludedDocuments').onclick=openExcludedDocuments;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
 function rawOf(id){for(const d of Object.values(S.data))for(const r of d.rows||[])if(r.id===id)return r;return null}
 function canMoveDate(r){return !!r&&['CLI','PRV'].includes(r.s)&&(Number.isSafeInteger(r.asientoItemId)&&r.asientoItemId>0||typeof r.asientoItemId==='string'&&/^[1-9]\d*$/.test(r.asientoItemId))}
@@ -962,8 +1018,8 @@ function setDate(id,f){const raw=rawOf(id);if(!canMoveDate(raw))return;S.ovr=S.o
   if(d){const it=allMovs().filter(r=>d.ids.has(r.id)&&(!d.options.month||r.f.startsWith(d.options.month+'-')));const b=$('#drawerHost .body'),st=b?b.scrollTop:0;openDrawer(d.title,it,d.sub,d.options);const b2=$('#drawerHost .body');if(b2)b2.scrollTop=st}}
 document.addEventListener('change',e=>{const t=e.target;if(t.classList&&t.classList.contains('dch2'))setDate(t.dataset.id,t.value||null)});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rsd]');if(b)setDate(b.dataset.rsd,null)});
-function liHTML(r){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportToday();
-  return `<div class="li"><div class="p" title="${esc(r.p)}">${esc(r.p)}</div><div class="m ${v<0?'neg':'pos'}">${$f2(v)}</div>
+function liHTML(r,selectable=false,selected){const v=ars(r),number=flowDocNumber(r);const late=r.f<reportToday();
+  return `<div class="li"><div class="p" title="${esc(r.p)}">${selectable===true?`<input class="doc-select" type="checkbox" data-exclude-select="${esc(r.id)}" aria-label="Seleccionar ${esc(number)}"${selected?.has(r.id)?' checked':''}>`:''}${esc(r.p)}</div><div class="m ${v<0?'neg':'pos'}">${$f2(v)}</div>
   <div class="dd">${canMoveDate(r)?`<input type="date" class="dch dch2" data-id="${esc(r.id)}" value="${r.f}" aria-label="Fecha de ${isIn(r.cat)?'cobro':'pago'} de ${esc(number)}">${r.fo0?`<s title="Fecha original">${fd(r.fo0)}</s><button class="lnk" data-rsd="${esc(r.id)}" title="Volver a la fecha original" aria-label="Volver a la fecha original">↺</button><span class="chip" style="color:var(--accent)">Reprogramado</span>`:''}`:`<span title="Sin AsientoItemID: fecha no editable">${fd(r.f)}</span>`}${late?'<span class="chip" style="color:var(--crit)">Vencido</span>':''}<span>${esc(number)}</span><span class="chip">${esc(r.cat)}</span>${r.c&&r.c!=='ARS'?`<span class="chip">${esc(r.c)} ${nf0.format(r.m)}</span>`:''}${r.company?`<span class="chip">${esc(r.company)}</span>`:''}${r.ej?'<span class="chip ej">Ejemplo</span>':''}${r.x?`<span>${esc(r.x)}</span>`:''}</div></div>`}
 
 /* ---------- RESUMEN ---------- */
@@ -1134,7 +1190,7 @@ function renderFlu(){
    <div class="fld"><label for="fQ">Buscar organización</label><input id="fQ" type="search" value="${esc(S.fq||'')}" placeholder="Cliente, proveedor, banco" style="width:220px"></div>
    ${ex.size?`<div class="fld"><label>Excluidas</label><button class="btn" id="fAll">Incluir las ${ex.size}</button></div>`:''}</div></div>
   ${missingComprobante?'<p class="note" role="status">Algunas cargas anteriores no incluyen el campo Comprobante. Actualizá Clientes y Proveedores en Datos y fuentes para mostrarlo.</p>':''}
-  <div class="flow-bulk" role="group" aria-label="Acciones sobre comprobantes seleccionados"><span id="flowSelectedCount" aria-live="polite"></span><button type="button" class="btn" id="flowMarkInc">Marcar como incobrables</button><button type="button" class="btn" id="flowUnmarkInc">Quitar incobrable</button><button type="button" class="btn" id="flowClearSelection">Limpiar selección</button><span class="note">Incobrable se aplica solo a cobros.</span></div>
+  <div class="flow-bulk" role="group" aria-label="Acciones sobre comprobantes seleccionados"><span id="flowSelectedCount" aria-live="polite"></span><button type="button" class="btn" id="flowExcludeDocs">Excluir seleccionados</button><button type="button" class="btn" id="flowMarkInc">Marcar como incobrables</button><button type="button" class="btn" id="flowUnmarkInc">Quitar incobrable</button><button type="button" class="btn" id="flowClearSelection">Limpiar selección</button><span class="note">Incobrable se aplica solo a cobros.</span></div>
   <div class="tblwrap"><table><thead><tr><th>Concepto</th>${F.cols.map(c=>`<th class="${atr(c).trim()}">${hdr(c)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
   ${line('Saldo inicial',c=>F.M[c].ini,'tot',null)}
   ${line('Ingresos',c=>F.M[c].in,'sec',sumIn)}${bodyIn}${memo}
@@ -1157,11 +1213,13 @@ function renderFlu(){
     $('#flowSelectedCount').textContent=`${selected.length} seleccionado${selected.length===1?'':'s'}`;
     $('#flowMarkInc').disabled=!income.some(r=>!r.inc);
     $('#flowUnmarkInc').disabled=!income.some(r=>r.inc);
+    $('#flowExcludeDocs').disabled=!selected.length;
     $('#flowClearSelection').disabled=!selected.length;
   };
   v.querySelectorAll('[data-doc-select]').forEach(input=>input.onchange=()=>{if(input.checked)FLOW_SELECTED.add(input.dataset.docSelect);else FLOW_SELECTED.delete(input.dataset.docSelect);updateSelection()});
   $('#flowMarkInc').onclick=()=>setInc(selectedRows().filter(r=>isIn(r.cat)&&!r.inc).map(r=>r.id),true);
   $('#flowUnmarkInc').onclick=()=>setInc(selectedRows().filter(r=>isIn(r.cat)&&r.inc).map(r=>r.id),false);
+  $('#flowExcludeDocs').onclick=()=>{const rows=selectedRows();FLOW_SELECTED.clear();excludeDocuments(rows);$('#openExcludedDocuments').focus()};
   $('#flowClearSelection').onclick=()=>{FLOW_SELECTED.clear();v.querySelectorAll('[data-doc-select]').forEach(input=>input.checked=false);updateSelection()};
   updateSelection();
   v.querySelectorAll('td[data-im]').forEach(td=>{const go=()=>openDrawer('Incobrables · '+hdr(td.dataset.im),IM[td.dataset.im].items,'No suman a los ingresos ·');td.onclick=go;td.onkeydown=e=>{if(e.key==='Enter')go()}});
@@ -1910,7 +1968,7 @@ function renderDat(){
   v.querySelectorAll('[data-clr]').forEach(b=>b.onclick=()=>{clearOvr(b.dataset.clr);S.data[b.dataset.clr]={rows:[]};save();renderAll()});
   v.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=SRC[b.dataset.copy].tpl.join('\t');const m=$('#msg-'+b.dataset.copy);
     navigator.clipboard.writeText(t).then(()=>{m.className='msg ok';m.textContent='Encabezados copiados. Pegalos en la fila 1 de una hoja de Excel.'},()=>{m.className='msg';m.textContent=t})});
-  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=WORKSPACE.mode==='ready'?emptyData():freshData();delete S.legacyExecuted;S.ovr={};S.dateChanges={};S.inc={};S.excl=[];save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
+  $('#resetAll').onclick=()=>{const b=$('#resetAll');if(b.dataset.c){S.data=WORKSPACE.mode==='ready'?emptyData():freshData();delete S.legacyExecuted;S.ovr={};S.dateChanges={};S.inc={};S.excl=[];S.excludedDocuments=[];CONS.key='';save();renderAll()}else{b.dataset.c=1;b.textContent='Confirmar: se borran las cargas propias';}}}
 
 /* ---------- carga de Excel ---------- */
 const nk=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -2001,7 +2059,10 @@ async function renderUsers(host=$('#v-usr')){
 /* ---------- shell ---------- */
 function setTab(t){if(S.tab==='dat'&&t!=='dat'&&FAPI.saveTimer)persistCredentials();S.tab=t;saveView();document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
   document.querySelectorAll('section.view').forEach(s=>s.hidden=s.id!=='v-'+t);renderTab()}
-function renderTab(){({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat,usr:renderUsers})[S.tab]()}
+function renderTab(){
+  $('#documentExclusionActions').hidden=!['flu','ven'].includes(S.tab);
+  ({res:renderRes,flu:renderFlu,ven:renderVen,eje:renderExecuted,ppt:renderPpt,dat:renderDat,usr:renderUsers})[S.tab]();
+}
 function renderAll(){
   const bank=bankBalance();$('#pRef').value=S.ref;$('#pTc').value=S.tc>0?nf1.format(S.tc):'';$('#pSaldo').value=bank?nf0.format(bank.value):S.saldoFecha===S.ref&&(S.saldoManualSet||S.saldo)?nf0.format(S.saldo):'';$('#pSaldo').disabled=!!bank;$('#pSaldo').title=bank?'Saldo tomado de Finnegans al '+fd(bank.date):'Ingresá el saldo correspondiente a la fecha de corte';$('#pHor').value=S.hor;$('#pAmounts').value=AMOUNT_UNIT;$('#pChq').checked=S.incChq;
   document.querySelectorAll('#pGran button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===S.gran));

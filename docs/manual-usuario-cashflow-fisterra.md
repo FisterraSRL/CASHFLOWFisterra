@@ -78,6 +78,8 @@ Solo los documentos de Clientes y Proveedores que tengan `AsientoItemID` permite
 
 ### Vencimientos
 
+Para excluir documentos, marcalos en el detalle de **Flujo de fondos** o **Vencimientos** y pulsá **Excluir seleccionados**. Se retiran de ambas vistas. Desde **Documentos excluidos** podés revisar el listado y pulsar **Reincorporar**. Las exclusiones se guardan por empresa y se reflejan en el consolidado.
+
 El calendario muestra cobros y pagos por día; al elegir un día se abre el detalle. La agenda muestra los próximos 14 días. Podés filtrar por **Todo**, **Cobros** o **Pagos**. La edición de fecha sigue la misma regla de `AsientoItemID` que el flujo.
 
 ### Ejecutado

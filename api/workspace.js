@@ -11,6 +11,9 @@ function validPayload(payload){
   if(!payload||typeof payload!=='object'||Array.isArray(payload)||payload.version!==1)return false;
   const state=payload.state,filters=payload.filters;
   if(!state||typeof state!=='object'||Array.isArray(state)||!state.data||typeof state.data!=='object'||Array.isArray(state.data))return false;
+  if(state.excludedDocuments!==undefined&&(!Array.isArray(state.excludedDocuments)||state.excludedDocuments.some(entry=>
+    !entry||['key','document','organization','company','category','date','currency'].some(field=>typeof entry[field]!=='string')||
+    !entry.key||!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)||!Number.isFinite(entry.amount))))return false;
   if(state.fx!==undefined&&(!state.fx||typeof state.fx!=='object'||Array.isArray(state.fx)||Object.entries(state.fx).some(([currency,rate])=>!(/^[A-Z]{3}$/.test(currency))||currency==='ARS'||typeof rate!=='number'||!Number.isFinite(rate)||rate<=0||rate>=1e12)))return false;
   if(!filters||typeof filters!=='object'||Array.isArray(filters))return false;
   if(payload.vault!==undefined){
@@ -41,6 +44,7 @@ function validCompanyPayload(payload,company){
   }
   for(const filters of Object.values(payload.filters))if(filters.empresa&&filters.empresa!==company.code)return false;
   for(const change of Object.values(payload.state.dateChanges||{}))if(change.company&&!names.has(change.company))return false;
+  for(const entry of payload.state.excludedDocuments||[])if(entry.company&&!names.has(entry.company))return false;
   return true;
 }
 
