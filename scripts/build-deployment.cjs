@@ -19,7 +19,10 @@ for(const name of ['Montserrat-Variable-400-700.woff2','Montserrat-Variable-Ital
 }
 replaceOnce('<!--FISTERRA_LOGO-->',read('app/brand/logo/fisterra-lockup-horizontal.svg').toString('utf8'));
 let manual=read('docs/manual-usuario-cashflow-fisterra.md').toString('utf8');
-if(installation)manual=manual.replaceAll('Cashflow Fisterra',`Cashflow ${installation}`).replace('**Acceso:** https://cashflowfisterra.vercel.app/','**Acceso:** la URL de esta instalación').replace('Abrí la URL de Fisterra','Abrí la URL de tu instalación');
+if(installation){
+  const access=installation.toLowerCase()==='nubiral'?'https://cashflownubiral.vercel.app/':'la URL de esta instalación';
+  manual=manual.replaceAll('Cashflow Fisterra',`Cashflow ${installation}`).replace('https://cashflowfisterra.vercel.app/',access).replace('Abrí la URL de Fisterra',`Abrí la URL de ${installation}`);
+}
 manual=manual.replace(/(\*\*Versión de la aplicación:\*\* )\d+\.\d+\.\d+/,`$1${JSON.parse(read('package.json')).version}`);
 const manualPage=renderManualMarkdown(manual);
 replaceOnce('<!--MANUAL_CONTENT-->',manualPage.html);

@@ -391,7 +391,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.37">v1.0.37</span>
+    <span class="app-version" aria-label="Versión 1.0.38">v1.0.38</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -460,8 +460,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <a href="#manual-section-7" data-manual-target="manual-section-7">7. Datos y fuentes</a>
 <a href="#manual-section-8" data-manual-target="manual-section-8">8. Rutina recomendada y problemas frecuentes</a>
 <a href="#manual-section-9" data-manual-target="manual-section-9">9. Preguntas frecuentes</a></nav><article class="manual-content" id="manualContent"><h1>Manual de uso de Cashflow Fisterra</h1>
-<p><strong>Versión de la aplicación:</strong> 1.0.37</p>
-<p><strong>Fecha del manual:</strong> 20 de noviembre de 2026</p>
+<p><strong>Versión de la aplicación:</strong> 1.0.38</p>
+<p><strong>Fecha del manual:</strong> 25 de noviembre de 2026</p>
 <p><strong>Acceso:</strong> <a href="https://cashflowfisterra.vercel.app/" target="_blank" rel="noopener noreferrer">https://cashflowfisterra.vercel.app/</a></p>
 <p>Este manual explica el uso diario de Cashflow Fisterra y las tareas del usuario administrador. La aplicación guarda datos y parámetros por empresa. Las consultas a Finnegans se ejecutan cuando el usuario las solicita.</p>
 <h2 id="manual-section-1">1. Ingreso y selección de empresa</h2>
@@ -508,7 +508,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <li><strong>Saldo bancos al corte:</strong> suma de las cuentas obtenidas por API cuando la fecha coincide con el corte y existen las cotizaciones necesarias. Si no hay saldo API válido, se puede cargar uno manual.</li>
 <li><strong>TC USD y cotizaciones:</strong> equivalencia de cada moneda en pesos argentinos. Se configuran en <strong>Datos y fuentes</strong>. Una moneda sin cotización impide calcular importes conjuntos confiables.</li>
 <li><strong>Horizonte:</strong> 30 días, 90 días, 6 meses o 12 meses.</li>
-<li><strong>Importes detallados:</strong> pesos con centavos, pesos sin decimales, miles o millones.</li>
+<li>En <strong>Importes detallados</strong>, elegí pesos con centavos, pesos sin decimales, <strong>Miles</strong> o <strong>Millones</strong>. En Miles, $125.000 se muestra como 125,00 mil pesos. El navegador recuerda la opción.</li>
 <li><strong>Agrupar por:</strong> día, semana, mes o año para el flujo.</li>
 <li><strong>Cheques emitidos vencidos sin conciliar:</strong> se incluyen solo si marcás la opción correspondiente.</li>
 </ul>
@@ -520,8 +520,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <p>Presenta ingresos, egresos y saldos por período. Desplegá una categoría para ver organizaciones y luego comprobantes. En facturas se muestra <strong>Comprobante</strong>; en cheques, el número de cheque. Podés excluir organizaciones para simular escenarios y seleccionar cobros para marcarlos como <strong>incobrables</strong>. Los incobrables dejan de sumar a los ingresos proyectados.</p>
 <p>Solo los documentos de Clientes y Proveedores que tengan <code>AsientoItemID</code> permiten modificar la fecha. Los cheques y los documentos sin ese identificador muestran la fecha sin editor. Una modificación queda guardada como cambio pendiente; no se envía a Finnegans automáticamente.</p>
 <h3>Vencimientos</h3>
-<p>Para excluir documentos, marcalos en el detalle de <strong>Flujo de fondos</strong> o <strong>Vencimientos</strong> y pulsá <strong>Excluir seleccionados</strong>. Se retiran de ambas vistas. Desde <strong>Documentos excluidos</strong> podés revisar el listado y pulsar <strong>Reincorporar</strong>. Las exclusiones se guardan por empresa y se reflejan en el consolidado.</p>
-<p>El calendario muestra cobros y pagos por día; al elegir un día se abre el detalle. La agenda muestra los próximos 14 días. Podés filtrar por <strong>Todo</strong>, <strong>Cobros</strong> o <strong>Pagos</strong>. La edición de fecha sigue la misma regla de <code>AsientoItemID</code> que el flujo.</p>
+<p>Elegí un día para abrir su detalle o pulsá <strong>Ver vencimientos del mes</strong> para revisar el mes visible. <strong>Ordenar por</strong> permite elegir fecha, organización de A a Z o importe de menor a mayor. <strong>Agrupar por</strong> separa los documentos por fecha o por organización y muestra la cantidad y el total neto de cada grupo. El calendario permite filtrar por <strong>Todo</strong>, <strong>Cobros</strong> o <strong>Pagos</strong>. La agenda muestra los próximos 14 días.</p>
+<h3>Excluir y reincorporar documentos</h3>
+<ol>
+<li>En <strong>Flujo de fondos</strong>, marcá los documentos en la tabla o en su detalle. En <strong>Vencimientos</strong>, abrí un día o el mes y marcalos en el detalle.</li>
+<li>Pulsá <strong>Excluir seleccionados</strong>. Los comprobantes y cheques seleccionados se retiran de las dos solapas y de los totales de la proyección.</li>
+<li>Para recuperarlos, abrí <strong>Documentos excluidos</strong> desde cualquiera de las dos solapas y pulsá <strong>Reincorporar</strong> junto a cada documento.</li>
+</ol>
+<p>Las exclusiones se guardan por empresa y se reflejan en el consolidado. Para gestionar una exclusión de otra empresa, seleccionala en el encabezado.</p>
 <h3>Ejecutado</h3>
 <p>Reúne <strong>Cobros ejecutados</strong> y <strong>Pagos ejecutados</strong> ya registrados. Podés elegir un mes o todos los meses y ver totales, neto, cobertura, evolución mensual, categorías, cuentas y registros. Las aplicaciones a facturas aparecen como detalle y no vuelven a sumarse. Si falta una fuente o los períodos consultados no coinciden, el neto y la cobertura se muestran como <strong>Sin datos</strong>.</p>
 <h3>Presupuesto vs real</h3>

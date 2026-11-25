@@ -1,8 +1,8 @@
 # Manual de uso de Cashflow Fisterra
 
-**Versión de la aplicación:** 1.0.34
+**Versión de la aplicación:** 1.0.38
 
-**Fecha del manual:** 20 de noviembre de 2026
+**Fecha del manual:** 25 de noviembre de 2026
 
 **Acceso:** https://cashflowfisterra.vercel.app/
 
@@ -58,7 +58,7 @@ Cada usuario debe tener su propia cuenta. La contraseña inicial se comunica por
 - **Saldo bancos al corte:** suma de las cuentas obtenidas por API cuando la fecha coincide con el corte y existen las cotizaciones necesarias. Si no hay saldo API válido, se puede cargar uno manual.
 - **TC USD y cotizaciones:** equivalencia de cada moneda en pesos argentinos. Se configuran en **Datos y fuentes**. Una moneda sin cotización impide calcular importes conjuntos confiables.
 - **Horizonte:** 30 días, 90 días, 6 meses o 12 meses.
-- **Importes detallados:** pesos con centavos, pesos sin decimales, miles o millones.
+- En **Importes detallados**, elegí pesos con centavos, pesos sin decimales, **Miles** o **Millones**. En Miles, $125.000 se muestra como 125,00 mil pesos. El navegador recuerda la opción.
 - **Agrupar por:** día, semana, mes o año para el flujo.
 - **Cheques emitidos vencidos sin conciliar:** se incluyen solo si marcás la opción correspondiente.
 
@@ -78,9 +78,15 @@ Solo los documentos de Clientes y Proveedores que tengan `AsientoItemID` permite
 
 ### Vencimientos
 
-Para excluir documentos, marcalos en el detalle de **Flujo de fondos** o **Vencimientos** y pulsá **Excluir seleccionados**. Se retiran de ambas vistas. Desde **Documentos excluidos** podés revisar el listado y pulsar **Reincorporar**. Las exclusiones se guardan por empresa y se reflejan en el consolidado.
+Elegí un día para abrir su detalle o pulsá **Ver vencimientos del mes** para revisar el mes visible. **Ordenar por** permite elegir fecha, organización de A a Z o importe de menor a mayor. **Agrupar por** separa los documentos por fecha o por organización y muestra la cantidad y el total neto de cada grupo. El calendario permite filtrar por **Todo**, **Cobros** o **Pagos**. La agenda muestra los próximos 14 días.
 
-El calendario muestra cobros y pagos por día; al elegir un día se abre el detalle. La agenda muestra los próximos 14 días. Podés filtrar por **Todo**, **Cobros** o **Pagos**. La edición de fecha sigue la misma regla de `AsientoItemID` que el flujo.
+### Excluir y reincorporar documentos
+
+1. En **Flujo de fondos**, marcá los documentos en la tabla o en su detalle. En **Vencimientos**, abrí un día o el mes y marcalos en el detalle.
+2. Pulsá **Excluir seleccionados**. Los comprobantes y cheques seleccionados se retiran de las dos solapas y de los totales de la proyección.
+3. Para recuperarlos, abrí **Documentos excluidos** desde cualquiera de las dos solapas y pulsá **Reincorporar** junto a cada documento.
+
+Las exclusiones se guardan por empresa y se reflejan en el consolidado. Para gestionar una exclusión de otra empresa, seleccionala en el encabezado.
 
 ### Ejecutado
 
