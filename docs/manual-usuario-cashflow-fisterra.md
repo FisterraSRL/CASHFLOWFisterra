@@ -58,7 +58,7 @@ Cada usuario debe tener su propia cuenta. La contraseña inicial se comunica por
 - **Saldo bancos al corte:** suma de las cuentas obtenidas por API cuando la fecha coincide con el corte y existen las cotizaciones necesarias. Si no hay saldo API válido, se puede cargar uno manual.
 - **TC USD y cotizaciones:** equivalencia de cada moneda en pesos argentinos. Se configuran en **Datos y fuentes**. Una moneda sin cotización impide calcular importes conjuntos confiables.
 - **Horizonte:** 30 días, 90 días, 6 meses o 12 meses.
-- **Importes detallados:** pesos con centavos, pesos sin decimales o millones.
+- **Importes detallados:** pesos con centavos, pesos sin decimales, miles o millones.
 - **Agrupar por:** día, semana, mes o año para el flujo.
 - **Cheques emitidos vencidos sin conciliar:** se incluyen solo si marcás la opción correspondiente.
 

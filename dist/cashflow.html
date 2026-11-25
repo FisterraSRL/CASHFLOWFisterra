@@ -387,7 +387,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
  <div class="wrap top">
   <div class="brandbar">
     <span class="app-pill">CASHFLOW</span>
-    <span class="app-version" aria-label="Versión 1.0.35">v1.0.35</span>
+    <span class="app-version" aria-label="Versión 1.0.36">v1.0.36</span>
     <span class="company">FISTERRA</span>
     <div class="brand-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" role="img" aria-label="Fisterra">
   <title>Fisterra — lockup horizontal</title>
@@ -418,7 +418,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <div class="fld"><label for="pHor">Horizonte</label>
     <select id="pHor"><option value="30">30 días</option><option value="90">90 días</option><option value="180">6 meses</option><option value="365">12 meses</option></select></div>
   <div class="fld"><label for="pAmounts">Importes detallados</label>
-    <select id="pAmounts"><option value="ARS">Pesos con centavos</option><option value="ARS0">Pesos sin decimales</option><option value="M">Millones</option></select></div>
+    <select id="pAmounts"><option value="ARS">Pesos con centavos</option><option value="ARS0">Pesos sin decimales</option><option value="K">Miles</option><option value="M">Millones</option></select></div>
   <div class="fld"><label>Agrupar por</label>
     <div class="seg" id="pGran"><button data-g="D">Día</button><button data-g="S">Semana</button><button data-g="M">Mes</button><button data-g="A">Año</button></div></div>
   <label class="chk"><input type="checkbox" id="pChq"> Incluir cheques emitidos vencidos sin conciliar</label>
@@ -455,7 +455,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <a href="#manual-section-7" data-manual-target="manual-section-7">7. Datos y fuentes</a>
 <a href="#manual-section-8" data-manual-target="manual-section-8">8. Rutina recomendada y problemas frecuentes</a>
 <a href="#manual-section-9" data-manual-target="manual-section-9">9. Preguntas frecuentes</a></nav><article class="manual-content" id="manualContent"><h1>Manual de uso de Cashflow Fisterra</h1>
-<p><strong>Versión de la aplicación:</strong> 1.0.35</p>
+<p><strong>Versión de la aplicación:</strong> 1.0.36</p>
 <p><strong>Fecha del manual:</strong> 20 de noviembre de 2026</p>
 <p><strong>Acceso:</strong> <a href="https://cashflowfisterra.vercel.app/" target="_blank" rel="noopener noreferrer">https://cashflowfisterra.vercel.app/</a></p>
 <p>Este manual explica el uso diario de Cashflow Fisterra y las tareas del usuario administrador. La aplicación guarda datos y parámetros por empresa. Las consultas a Finnegans se ejecutan cuando el usuario las solicita.</p>
@@ -503,7 +503,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <li><strong>Saldo bancos al corte:</strong> suma de las cuentas obtenidas por API cuando la fecha coincide con el corte y existen las cotizaciones necesarias. Si no hay saldo API válido, se puede cargar uno manual.</li>
 <li><strong>TC USD y cotizaciones:</strong> equivalencia de cada moneda en pesos argentinos. Se configuran en <strong>Datos y fuentes</strong>. Una moneda sin cotización impide calcular importes conjuntos confiables.</li>
 <li><strong>Horizonte:</strong> 30 días, 90 días, 6 meses o 12 meses.</li>
-<li><strong>Importes detallados:</strong> pesos con centavos, pesos sin decimales o millones.</li>
+<li><strong>Importes detallados:</strong> pesos con centavos, pesos sin decimales, miles o millones.</li>
 <li><strong>Agrupar por:</strong> día, semana, mes o año para el flujo.</li>
 <li><strong>Cheques emitidos vencidos sin conciliar:</strong> se incluyen solo si marcás la opción correspondiente.</li>
 </ul>
@@ -580,8 +580,9 @@ const SRC={
 };
 const LS='cf-ghn-v1';
 const AMOUNT_UNIT_KEY=LS+'-amount-unit';
+const AMOUNT_LABELS={ARS:'pesos argentinos con dos decimales',ARS0:'pesos argentinos sin decimales',K:'miles de pesos argentinos',M:'millones de pesos argentinos'};
 let AMOUNT_UNIT='ARS';
-try{const saved=localStorage.getItem(AMOUNT_UNIT_KEY);if(saved==='M'||saved==='ARS0')AMOUNT_UNIT=saved}catch{}
+try{const saved=localStorage.getItem(AMOUNT_UNIT_KEY);if(Object.hasOwn(AMOUNT_LABELS,saved))AMOUNT_UNIT=saved}catch{}
 const todayISO=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
 let S={ref:RAW.ref>todayISO?RAW.ref:todayISO,tc:RAW.tc,fx:{},saldo:0,hor:90,gran:'S',incChq:false,tab:'res',calM:null,calF:'all',pptM:null,data:null};
 function freshData(){const at=RAW.mov.length||RAW.cartera.length?RAW.ref:null;return{
@@ -732,12 +733,25 @@ const nf0=new Intl.NumberFormat('es-AR',{maximumFractionDigits:0});
 const nf1=new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1});
 const nf2=new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const nfSmallM=new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFractionDigits:8});
+const nfSmallK=new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:5});
+const formatThousands=amount=>(amount<1000?nfSmallK:nf2).format(amount/1000);
 const $f=v=>(v<0?'−':'')+'$ '+nf0.format(Math.abs(v));
-const $f2=v=>(v<0&&!(AMOUNT_UNIT==='ARS0'&&Math.abs(v)<0.5)?'−':'')+'$ '+(AMOUNT_UNIT==='ARS0'?nf0:nf2).format(Math.abs(v));
+const $f2=v=>{
+  const amount=Math.abs(v),sign=v<0&&(AMOUNT_UNIT!=='ARS0'||amount>=0.5)?'−':'';
+  const text=AMOUNT_UNIT==='K'?formatThousands(amount)+' mil':(AMOUNT_UNIT==='ARS0'?nf0:nf2).format(amount);
+  return `${sign}$ ${text}`;
+};
 const $M=v=>{const a=Math.abs(v)/1e6;return (v<0?'−':'')+'$ '+(a>=100?nf0.format(a):nf1.format(a))+' M'};
 const hasAmount=v=>Math.abs(v)>=0.005;
-const amountUnitLabel=()=>AMOUNT_UNIT==='M'?'millones de pesos argentinos':AMOUNT_UNIT==='ARS0'?'pesos argentinos sin decimales':'pesos argentinos con dos decimales';
-const tM=v=>!hasAmount(v)?'–':(v<0&&!(AMOUNT_UNIT==='ARS0'&&Math.abs(v)<0.5)?'−':'')+(AMOUNT_UNIT==='ARS'?nf2.format(Math.abs(v)):AMOUNT_UNIT==='ARS0'?nf0.format(Math.abs(v)):(Math.abs(v)<5e4?nfSmallM:nf1).format(Math.abs(v)/1e6));
+const amountUnitLabel=()=>AMOUNT_LABELS[AMOUNT_UNIT];
+const agendaAmountUnit=()=>({K:'mil $',M:'M'})[AMOUNT_UNIT]||'$';
+function tM(value){
+  if(!hasAmount(value))return '–';
+  const amount=Math.abs(value),sign=value<0&&(AMOUNT_UNIT!=='ARS0'||amount>=0.5)?'−':'';
+  if(AMOUNT_UNIT==='K')return sign+formatThousands(amount);
+  if(AMOUNT_UNIT==='M')return sign+(amount<5e4?nfSmallM:nf1).format(amount/1e6);
+  return sign+(AMOUNT_UNIT==='ARS0'?nf0:nf2).format(amount);
+}
 const FX_PENDING=new Set();
 const rateFor=c=>c==='ARS'?1:c==='USD'?S.tc:Number(S.fx?.[c]);
 const missingFx=rows=>[...new Set(rows.map(r=>r.c).filter(c=>c&&c!=='ARS'&&!(rateFor(c)>0)))].sort();
@@ -1201,7 +1215,7 @@ function renderConsolidatedVen(ids){
   const cells=days.map(f=>{const g=agg(f),cls=['day',f.slice(0,7)!==S.calM?'out':'',f===today?'today':'',f<today?'past':'',g.n?'has':''].join(' ');
     return `<button class="${cls}" data-f="${f}" aria-label="${fd(f)}: ${g.n} vencimientos de ${list.length} empresas"><span class="dn"><span>${+f.slice(8)}</span>${g.n?`<span class="note">${g.n}</span>`:''}</span>${hasAmount(g.income)?`<span class="amt ${g.income<0?'neg':'pos'}" title="${$f2(g.income)}">${g.income>0?'+':''}${tM(g.income)}</span>`:''}${hasAmount(g.expenses)?`<span class="amt ${g.expenses>0?'pos':'neg'}" title="${$f2(g.expenses)}">${tM(g.expenses)}</span>`:''}<span class="bar">${g.income?`<span style="background:var(--in);width:${Math.max(4,Math.abs(g.income)/maxAbs*50)}%"></span>`:''}${g.expenses?`<span style="background:var(--out);width:${Math.max(4,Math.abs(g.expenses)/maxAbs*50)}%"></span>`:''}</span></button>`}).join('');
   let agenda='';for(let i=0;i<14;i++){const f=addD(today,i),rows=[...(byDay[f]||[])].sort((a,b)=>a.m-b.m);if(!rows.length)continue;const g=agg(f);
-    agenda+=`<div><div class="dh"><span>${DOW[D(f).getUTCDay()]} ${fd(f)}${i===0?' · hoy':''}</span><span><span class="${g.income<0?'neg':'pos'}">${hasAmount(g.income)?(g.income>0?'+':'')+tM(g.income):'–'}</span> · <span class="${g.expenses>0?'pos':'neg'}">${tM(g.expenses)}</span> ${AMOUNT_UNIT==='M'?'M':'$'}</span></div>${rows.slice(0,6).map(consolidatedItemHTML).join('')}${rows.length>6?`<button class="btn" data-f="${f}" style="margin-top:6px">Ver los ${rows.length}</button>`:''}</div>`}
+    agenda+=`<div><div class="dh"><span>${DOW[D(f).getUTCDay()]} ${fd(f)}${i===0?' · hoy':''}</span><span><span class="${g.income<0?'neg':'pos'}">${hasAmount(g.income)?(g.income>0?'+':'')+tM(g.income):'–'}</span> · <span class="${g.expenses>0?'pos':'neg'}">${tM(g.expenses)}</span> ${agendaAmountUnit()}</span></div>${rows.slice(0,6).map(consolidatedItemHTML).join('')}${rows.length>6?`<button class="btn" data-f="${f}" style="margin-top:6px">Ver los ${rows.length}</button>`:''}</div>`}
   const month=MES[mm-1]+' '+yy;
   v.innerHTML=picker+`<div class="toolbar"><div><div class="h2">Vencimientos consolidados</div><div class="note">${list.length} empresas · importes en ${amountUnitLabel()} · vista de solo lectura</div></div></div>${warnings.length?`<div class="banner" role="status"><span class="chip" style="color:var(--crit)">Revisar datos</span><span>${blocked?'Faltan cotizaciones; completalas en cada empresa para mostrar los vencimientos conjuntos.':'Revisá las fuentes y fechas de las empresas seleccionadas.'}</span></div><details class="card"><summary>Ver ${warnings.length} observaciones</summary><ul>${warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<div class="grid2"><div class="card"><div class="toolbar"><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="cPrev" aria-label="Mes anterior">‹</button><div class="h2" style="min-width:90px;text-align:center;text-transform:capitalize">${month}</div><button class="btn" id="cNext" aria-label="Mes siguiente">›</button><button class="btn" id="cHoy">Hoy</button></div><div class="seg" id="cF"><button data-v="all">Todo</button><button data-v="in">Cobros</button><button data-v="out">Pagos</button></div></div><div class="cal">${['lun','mar','mié','jue','vie','sáb','dom'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div><p class="note" style="margin-top:8px">Los días anteriores a hoy (${fd(today)}) con fondo rojo tienen vencimientos pendientes.</p></div><div class="card"><h2>Agenda conjunta de los próximos 14 días</h2><p class="sub">Pagos primero, con la empresa identificada en cada documento</p><div class="agenda">${agenda||'<p class="note">Sin vencimientos.</p>'}</div></div></div>`;
   bindConsolidatedPicker();
@@ -1229,7 +1243,7 @@ function renderVen(){
   // agenda 14 días
   let ag='';for(let i=0;i<14;i++){const f=addD(today,i),L=byDay[f]||[];if(!L.length)continue;const g=agg(f);
     L.sort((a,b)=>ars(a)-ars(b));
-    ag+=`<div><div class="dh"><span>${DOW[D(f).getUTCDay()]} ${fd(f)}${i===0?' · hoy':''}</span><span><span class="pos">${hasAmount(g.a)?'+'+tM(g.a):'–'}</span> · <span class="neg">${tM(g.b)}</span> ${AMOUNT_UNIT==='M'?'M':'$'}</span></div>${L.slice(0,6).map(liHTML).join('')}${L.length>6?`<button class="btn" data-f="${f}" style="margin-top:6px">Ver los ${L.length}</button>`:''}</div>`}
+    ag+=`<div><div class="dh"><span>${DOW[D(f).getUTCDay()]} ${fd(f)}${i===0?' · hoy':''}</span><span><span class="pos">${hasAmount(g.a)?'+'+tM(g.a):'–'}</span> · <span class="neg">${tM(g.b)}</span> ${agendaAmountUnit()}</span></div>${L.slice(0,6).map(liHTML).join('')}${L.length>6?`<button class="btn" data-f="${f}" style="margin-top:6px">Ver los ${L.length}</button>`:''}</div>`}
   const mN=MES[mm-1]+' '+yy;
   v.innerHTML=consolidatedPicker()+`<div class="grid2"><div class="card">
    <div class="toolbar"><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="cPrev" aria-label="Mes anterior">‹</button><div class="h2" style="min-width:90px;text-align:center;text-transform:capitalize">${mN}</div><button class="btn" id="cNext" aria-label="Mes siguiente">›</button><button class="btn" id="cHoy">Hoy</button></div>
@@ -2007,7 +2021,7 @@ $('#pRef').onchange=e=>{if(e.target.value){S.ref=e.target.value;save();renderAll
 $('#pTc').onchange=e=>{const v=num(e.target.value);if(v>0){S.tc=v;save()}renderAll()};
 $('#pSaldo').onchange=e=>{S.saldo=num(e.target.value);S.saldoManualSet=e.target.value.trim()!=='';S.saldoFecha=S.ref;save();renderAll()};
 $('#pHor').onchange=e=>{S.hor=+e.target.value;save();renderAll()};
-$('#pAmounts').onchange=e=>{AMOUNT_UNIT=['ARS','ARS0','M'].includes(e.target.value)?e.target.value:'ARS';try{localStorage.setItem(AMOUNT_UNIT_KEY,AMOUNT_UNIT)}catch{}renderAll()};
+$('#pAmounts').onchange=e=>{AMOUNT_UNIT=Object.hasOwn(AMOUNT_LABELS,e.target.value)?e.target.value:'ARS';try{localStorage.setItem(AMOUNT_UNIT_KEY,AMOUNT_UNIT)}catch{}renderAll()};
 $('#pChq').onchange=e=>{S.incChq=e.target.checked;save();renderAll()};
 document.querySelectorAll('#pGran button').forEach(b=>b.onclick=()=>{S.gran=b.dataset.g;save();renderAll()});
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
